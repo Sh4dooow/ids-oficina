@@ -66,7 +66,8 @@ export default function Aprobaciones({ compacto = false }) {
               <input placeholder="Nota opcional para el agente (ej: cambia el gancho, baja a 5 clips…)" value={nota[a.id] || ''} onChange={e => setNota({ ...nota, [a.id]: e.target.value })} />
               <div className="fila" style={{ marginTop: 6 }}>
                 {(a.opciones || []).length > 2
-                  ? (a.opciones || []).map(o => <button key={o.id} className="btn-sec" onClick={() => decidir(a, o.id)}>{o.label}</button>)
+                  ? <>{(a.opciones || []).map(o => <button key={o.id} className="btn-sec" onClick={() => decidir(a, o.id)}>{o.label}</button>)}
+                      <button onClick={() => (nota[a.id] || '').trim() ? decidir(a, 'texto') : alert('Escribe tu respuesta en la nota')}>📨 Responder con mi nota</button></>
                   : <>
                     <button onClick={() => decidir(a, 'si')}>✅ Aprobar</button>
                     <button className="btn-sec" onClick={() => decidir(a, 'no')}>✕ Rechazar</button>

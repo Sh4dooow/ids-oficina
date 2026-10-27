@@ -367,7 +367,7 @@ def aprobaciones(ids):
                     else: cmd = ["issue", "interaction:reject", a["issue_id"], a["id"], "--reason", a.get("nota") or "Rechazado por Iván", "--json"]
                 else:
                     qid = (q("select payload from issue_thread_interactions where id=%s", a["id"])[0]["payload"].get("questions") or [{}])[0].get("id")
-                    cmd = ["issue", "interaction:respond", a["issue_id"], a["id"], "--answers-json", json.dumps([{"questionId": qid, "selectedOptionIds": [a["decision"]] if a["decision"] not in ("si", "no") else [], "freeText": a.get("nota") or ""}]), "--json"]
+                    cmd = ["issue", "interaction:respond", a["issue_id"], a["id"], "--answers-json", json.dumps([{"questionId": qid, "selectedOptionIds": [a["decision"]] if a["decision"] not in ("si", "no", "texto") else [], "freeText": a.get("nota") or ""}]), "--json"]
                 r = cli(*cmd); ok = r.returncode == 0
                 if not ok: print("interaccion fallo:", r.stderr[-300:], r.stdout[-200:])
                 if a.get("nota"):
