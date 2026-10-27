@@ -131,9 +131,10 @@ def sync_agentes(ids):
 def sync_tareas(ids):
     issues = q("select id,identifier,title,description,status,assignee_agent_id,created_at,updated_at, (select body from issue_comments c where c.issue_id=issues.id order by c.created_at desc limit 1) ult from issues order by created_at")
     con_ok = {r["issue_id"] for r in q("select issue_id from issue_thread_interactions where status='pending'")}
+    ult_agente = {r["issue_id"]: r["author_agent_id"] for r in q("select distinct on (issue_id) issue_id, author_agent_id from issue_comments where author_agent_id is not null order by issue_id, created_at desc")}
     rows = []
     for i in issues:
-        slug = ids.get(i["assignee_agent_id"])
+        slug = ids.get(i["assignee_agent_id"]) or (ids.get(ult_agente.get(i["id"])) if i["status"] in ("in_review", "done") else None)
         est = mapa_estado(i, slug)
         if est is None: continue
         st = i["status"]
@@ -298,11 +299,15 @@ def correcciones_web():
     for t in sb.get("tareas", "correccion=not.is.null&paperclip_id=not.is.null&select=id,paperclip_id,paperclip_identifier,correccion,correccion_leccion,asignado_a"):
         try:
             i = q("select assignee_agent_id,title from issues where id=%s", t["paperclip_id"])
-            agente = ids_name.get(i[0]["assignee_agent_id"]) if i else None
+            aid = i[0]["assignee_agent_id"] if i else None
+            if not aid:  # al dejarla en revisión, Paperclip se la pasa a Iván: devolvérsela al agente que la hizo
+                ult = q("select author_agent_id from issue_comments where issue_id=%s and author_agent_id is not null order by created_at desc limit 1", t["paperclip_id"])
+                aid = ult[0]["author_agent_id"] if ult else None
+            agente = ids_name.get(aid)
             q("insert into issue_comments (id,company_id,issue_id,author_user_id,body,created_at,updated_at,author_type) values (gen_random_uuid(),%s,%s,%s,%s,now(),now(),'user')",
               COMPANY, t["paperclip_id"], ENV.get("PAPERCLIP_USER_ID", "ZDEFzCdEaUcenwUClaDjR8rFxqC4JOSN"),
               f"Iván ha revisado la entrega y NO le vale. Corrección:\n{t['correccion']}\n\nCorrígelo (pide OK antes de gastar créditos) y vuelve a dejarla en revisión.")
-            q("update issues set status='in_progress', updated_at=now() where id=%s", t["paperclip_id"])
+            q("update issues set status='in_progress', assignee_agent_id=coalesce(%s, assignee_agent_id), assignee_user_id=null, updated_at=now() where id=%s", aid, t["paperclip_id"])
             if agente: cli("agent", "wake", agente, "-C", COMPANY)
             if t.get("correccion_leccion") and t.get("asignado_a"):
                 sb.insert("lecciones", {"agente_id": t["asignado_a"], "titulo": ("Corrección " + (t.get("paperclip_identifier") or "") + ": " + t["correccion"][:90]).strip(), "contenido": t["correccion"], "tipo": "correccion", "orden": 999})
