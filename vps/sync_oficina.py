@@ -7,7 +7,7 @@ Paperclip -> Supabase:  estado de agentes, tareas (issues), comentarios, activid
 Supabase  -> Paperclip: tareas nuevas creadas en la web, mensajes de Iván al Jefe,
                         lecciones de la Escuela -> AGENTS.md de cada agente
 """
-import os, time, json, subprocess, sys, traceback, re
+import os, time, json, subprocess, sys, traceback, re, shutil
 import psycopg2, psycopg2.extras, requests
 
 ENV = {}
