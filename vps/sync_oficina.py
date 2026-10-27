@@ -101,7 +101,8 @@ def carpeta_producto(t):
 
 def q(sql, *a):
     with pg.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as c:
-        c.execute(sql, a); return c.fetchall()
+        c.execute(sql, a)
+        return c.fetchall() if c.description else []
 
 def agente_slug(agent_id, ids):
     return ids.get(agent_id)
