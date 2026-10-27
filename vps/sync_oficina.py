@@ -354,7 +354,8 @@ def correcciones_web():
 def podar_sesiones():
     """AHORRO: una sesión de Claude que crece mucho encarece cada turno (relee todo el historial).
     Si el agente está libre y su sesión pasa de 350 KB, se borra: la siguiente ejecución empieza ligera."""
-    libres = {AGENTES[a["name"]] for a in q("select name,status from agents") if a["status"] not in ("running", "working", "active") and a["name"] in AGENTES}
+    ocupados = {r["agent_id"] for r in q("select agent_id from heartbeat_runs where status in ('running','queued')")}
+    libres = {AGENTES[a["name"]] for a in q("select id,name,status from agents") if a["name"] in AGENTES and a["id"] not in ocupados and a["status"] not in ("running", "working", "active")}
     for slug in libres:
         base = f"/home/oficina/.claude-agentes/{slug}/projects"
         if not os.path.isdir(base): continue
@@ -364,6 +365,7 @@ def podar_sesiones():
                 pth = os.path.join(root, f)
                 try:
                     st = os.stat(pth)
+                    if time.time() - st.st_mtime < 600: continue  # nunca tocar una sesión usada hace menos de 10 min
                     if st.st_size > 350_000 or time.time() - st.st_mtime > 2 * 86400:
                         os.remove(pth); print("sesion podada", slug, f[:8], st.st_size // 1000, "KB")
                 except OSError: pass
