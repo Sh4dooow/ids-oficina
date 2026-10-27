@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react'
 import { supabase, ESTADOS } from '../lib/supabase'
+import NuevaTarea from '../components/NuevaTarea.jsx'
 
 // Kanban. Arrastras una tarjeta a una columna -> cambia `estado` en Supabase
 // -> el orquestador despierta al agente de esa columna.
 export default function Tablero() {
   const [tareas, setTareas] = useState([])
   const [productos, setProductos] = useState([])
-  const [nueva, setNueva] = useState({ titulo: '', descripcion: '', producto_id: '' })
   const [abierta, setAbierta] = useState(null)
 
   useEffect(() => {
@@ -24,16 +24,6 @@ export default function Tablero() {
     setProductos(p || [])
   }
 
-  async function crear(e) {
-    e.preventDefault()
-    if (!nueva.titulo.trim()) return
-    await supabase.from('tareas').insert({
-      titulo: nueva.titulo, descripcion: nueva.descripcion,
-      producto_id: nueva.producto_id || null, origen: 'web', asignado_a: 'jefe',
-    })
-    setNueva({ titulo: '', descripcion: '', producto_id: '' })
-  }
-
   async function mover(id, estado) {
     const col = ESTADOS.find(e => e.id === estado)
     const t = tareas.find(x => x.id === id)
@@ -47,15 +37,7 @@ export default function Tablero() {
 
   return (
     <div className="tablero">
-      <form className="nueva-tarea" onSubmit={crear}>
-        <input placeholder="Nueva tarea (ej: vídeo UGC del busto de Vader)" value={nueva.titulo} onChange={e => setNueva({ ...nueva, titulo: e.target.value })} />
-        <select value={nueva.producto_id} onChange={e => setNueva({ ...nueva, producto_id: e.target.value })}>
-          <option value="">Sin producto</option>
-          {productos.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
-        </select>
-        <input placeholder="Detalles para el Jefe" value={nueva.descripcion} onChange={e => setNueva({ ...nueva, descripcion: e.target.value })} />
-        <button>Añadir</button>
-      </form>
+      <NuevaTarea productos={productos} onCreada={cargar} />
 
       <div className="columnas">
         {ESTADOS.map(col => (
@@ -69,6 +51,7 @@ export default function Tablero() {
                 onClick={() => setAbierta(t)}>
                 <b>{t.titulo}</b>
                 {t.productos && <div className="muted">📦 {t.productos.nombre}</div>}
+                <div className="muted">{t.audio_path ? '🎙 ' : ''}{t.referencia_url ? '🔗 ' : ''}{t.fotos_paths?.length ? '📷 ' : ''}</div>
                 {t.asignado_a && <div className="chip">{t.asignado_a}</div>}
               </div>
             ))}
@@ -96,7 +79,11 @@ function DetalleTarea({ tarea, cerrar }) {
     <div className="modal" onClick={cerrar}>
       <div className="card" onClick={e => e.stopPropagation()}>
         <h2>{tarea.titulo}</h2>
-        <p>{tarea.descripcion}</p>
+        {tarea.descripcion && <p style={{ whiteSpace: 'pre-wrap' }}>{tarea.descripcion}</p>}
+        {tarea.transcripcion && <p className="muted" style={{ whiteSpace: 'pre-wrap' }}>🎙 {tarea.transcripcion}</p>}
+        {tarea.audio_path && !tarea.transcripcion && <p className="muted">🎙 Audio enviado, transcribiendo…</p>}
+        {tarea.referencia_url && <p>🔗 <a href={tarea.referencia_url} target="_blank" rel="noreferrer">{tarea.referencia_url}</a></p>}
+        {tarea.fotos_paths?.length > 0 && <p className="muted">📷 {tarea.fotos_paths.length} foto(s) adjuntas</p>}
         <p className="muted">Estado: {tarea.estado} · Asignado: {tarea.asignado_a || '—'}
           {tarea.paperclip_identifier && <> · <a href={`https://oficina-49-12-251-2.sslip.io/IVA/issues/${tarea.paperclip_identifier}`} target="_blank" rel="noreferrer">ver en Paperclip ↗</a></>}
         </p>

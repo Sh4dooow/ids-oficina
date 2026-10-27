@@ -56,6 +56,39 @@ sb = SB()
 pg = psycopg2.connect(host="127.0.0.1", port=54329, user="paperclip", password="paperclip", dbname="paperclip")
 pg.autocommit = True
 
+OFICINA = "/home/oficina/oficina/OFICINA"
+WHISPER_PY = "/opt/whisper/bin/python"; YTDLP = "/opt/whisper/bin/yt-dlp"
+
+def tg(texto):
+    """Aviso a Iván por Telegram desde el bot del Jefe."""
+    try:
+        requests.post(f"https://api.telegram.org/bot{ENV['TELEGRAM_BOT_TOKEN']}/sendMessage",
+                      json={"chat_id": ENV["TELEGRAM_CHAT_ID"], "text": texto}, timeout=20)
+    except Exception as e: print("telegram:", e)
+
+def sb_download(path, dest):
+    r = requests.get(f"{SB_URL}/storage/v1/object/adjuntos/{path}", headers=sb.h(), timeout=120)
+    r.raise_for_status(); os.makedirs(os.path.dirname(dest), exist_ok=True); open(dest, "wb").write(r.content); return dest
+
+def transcribir(path):
+    code = ("from faster_whisper import WhisperModel;import sys;m=WhisperModel('small',device='cpu',compute_type='int8');"
+            "segs,_=m.transcribe(sys.argv[1],language='es',vad_filter=True);print(' '.join(s.text.strip() for s in segs))")
+    r = subprocess.run([WHISPER_PY, "-c", code, path], capture_output=True, text=True, timeout=900)
+    return r.stdout.strip()
+
+def descargar_referencia(url, carpeta):
+    os.makedirs(carpeta, exist_ok=True)
+    r = subprocess.run([YTDLP, "-o", os.path.join(carpeta, "ref_%(id)s.%(ext)s"), "--no-playlist", "-f", "mp4/best", "--print", "after_move:filepath", url],
+                       capture_output=True, text=True, timeout=600)
+    out = r.stdout.strip().splitlines()
+    return out[-1] if out else None
+
+def carpeta_producto(t):
+    if t.get("producto_id"):
+        p = sb.get("productos", f"id=eq.{t['producto_id']}&select=slug")
+        if p: return os.path.join(OFICINA, "productos", p[0]["slug"])
+    return os.path.join(OFICINA, "productos", "_entrantes", t["id"][:8])
+
 def q(sql, *a):
     with pg.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as c:
         c.execute(sql, a); return c.fetchall()
@@ -121,6 +154,32 @@ def sync_actividad(ids, tarea_ids):
 def tareas_web_nuevas():
     for t in sb.get("tareas", "paperclip_id=is.null&origen=eq.web&select=*"):
         desc = (t.get("descripcion") or "")
+        carpeta = carpeta_producto(t); os.makedirs(carpeta, exist_ok=True)
+        for sub in ("fotos", "referencias", "clips", "final"): os.makedirs(os.path.join(carpeta, sub), exist_ok=True)
+        # --- audio -> transcripción ---
+        if t.get("audio_path") and not t.get("transcripcion"):
+            try:
+                a = sb_download(t["audio_path"], os.path.join(carpeta, "_encargos", t["id"][:8] + ".webm"))
+                txt = transcribir(a) or "(audio vacío)"
+                sb.patch("tareas", f"id=eq.{t['id']}", {"transcripcion": txt}); t["transcripcion"] = txt
+                print("transcrito", t["id"][:8], len(txt), "chars")
+            except Exception as e: print("transcripción fallo:", e); t["transcripcion"] = "(no se pudo transcribir el audio)"
+        if t.get("transcripcion"): desc += f"\n\n## Audio de Iván (transcrito)\n{t['transcripcion']}"
+        # --- enlace de referencia -> descarga ---
+        if t.get("referencia_url"):
+            desc += f"\n\n## Vídeo de referencia\nURL: {t['referencia_url']}"
+            try:
+                f = descargar_referencia(t["referencia_url"], os.path.join(carpeta, "referencias"))
+                desc += f"\nDescargado en: {f}" if f else "\n(no se pudo descargar; usar la URL)"
+            except Exception as e: desc += f"\n(descarga fallida: {e})"
+        # --- fotos ---
+        fotos = []
+        for p in (t.get("fotos_paths") or []):
+            try: fotos.append(sb_download(p, os.path.join(carpeta, "fotos", os.path.basename(p))))
+            except Exception as e: print("foto fallo:", e)
+        if fotos: desc += "\n\n## Fotos del producto\n" + "\n".join(fotos)
+        desc += f"\n\nCarpeta del producto: {carpeta}"
+        subprocess.run(["chown", "-R", "oficina:oficina", carpeta])
         if t.get("producto_id"):
             p = sb.get("productos", f"id=eq.{t['producto_id']}&select=nombre,slug,tienda,carpeta_drive,brief")
             if p: desc += f"\n\nProducto: {p[0]['nombre']} (slug {p[0]['slug']}, tienda {p[0].get('tienda') or '-'})\nBrief:\n{p[0].get('brief') or '-'}"
@@ -131,6 +190,24 @@ def tareas_web_nuevas():
                                                       "titulo": f"{i.get('identifier')} · {t['titulo']}"})
             print("tarea web ->", i.get("identifier"))
         except Exception: print("agent-prompt fallo:", r.stdout[-300:], r.stderr[-300:])
+
+def avisos_terminadas(ids):
+    for i in q("select id,identifier,title,status,assignee_agent_id from issues where status='done'"):
+        t = sb.get("tareas", f"paperclip_id=eq.{i['id']}&select=id,avisado_listo")
+        if not t or t[0].get("avisado_listo"): continue
+        # buscar entregas en final/
+        entregas = []
+        for root, _, files in os.walk(os.path.join(OFICINA, "productos")):
+            if root.endswith("/final"):
+                for f in files:
+                    p = os.path.join(root, f)
+                    if time.time() - os.path.getmtime(p) < 6 * 3600: entregas.append(p.replace(OFICINA + "/", ""))
+        txt = (f"✅ Tarea {i['identifier']} terminada: «{i['title']}».\n"
+               + ("Entregas recientes:\n" + "\n".join("• " + e for e in entregas[:8]) + "\n" if entregas else "")
+               + f"\nRevísalo y respóndeme aquí con tu feedback empezando por \"{i['identifier']}:\" (qué está bien, qué corregir para la próxima). Lo convertiré en lección para el equipo.")
+        tg(txt)
+        sb.patch("tareas", f"id=eq.{t[0]['id']}", {"avisado_listo": True})
+        print("aviso terminada ->", i["identifier"])
 
 def mensajes_web_nuevos():
     for m in sb.get("mensajes", "procesado=eq.false&de=eq.ivan&para=eq.jefe&select=*"):
@@ -221,6 +298,7 @@ def loop():
             sync_actividad(ids, tarea_ids)
             tareas_web_nuevas()
             mensajes_web_nuevos()
+            avisos_terminadas(ids)
             if n % 6 == 0: escuela()
         except Exception:
             traceback.print_exc()

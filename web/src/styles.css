@@ -75,3 +75,10 @@ main { padding:20px; }
 .lista-productos { grid-column:1; }
 .productos .detalle { grid-column:2; grid-row:1 / span 2; }
 .productos label { display:flex; flex-direction:column; gap:4px; font-size:13px; color:var(--muted); }
+
+.nueva-tarea-form { margin-bottom:16px; }
+.grid2 { display:grid; grid-template-columns: 2fr 1fr; gap:8px; }
+.btn-sec { background:#2b3140; color:var(--texto); font-weight:600; padding:8px 12px; border-radius:8px; border:0; }
+.btn-rec { background:#ff4d4d; color:#fff; font-weight:700; padding:8px 12px; border-radius:8px; border:0; animation: pulso 1s infinite; }
+@keyframes pulso { 50% { opacity:.6 } }
+.audio-fila { flex-wrap:wrap; }
