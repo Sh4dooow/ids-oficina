@@ -1,0 +1,2 @@
+-- Esquema ya aplicado al proyecto "Iván Digital Studio Oficina" (plujzfznffusubwfujxv).
+-- Se guarda aquí como referencia / para recrearlo.
