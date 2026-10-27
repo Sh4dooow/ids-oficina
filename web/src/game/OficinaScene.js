@@ -164,6 +164,7 @@ export default class OficinaScene extends Phaser.Scene {
     // ---------- personajes ----------
     this.bus.on('apariencia', ({ id, apariencia, nombre }) => this.setApariencia(id, apariencia, nombre))
     for (const [id, m] of Object.entries(MESAS)) {
+      if (id === 'ceo') continue
       registrarPersonaje(s, 'pj-' + id, this.apariencias[id] || {})
       const spr = s.add.sprite(m.x * T + 8, m.y * T + 8, 'pj-' + id, 'up0').setOrigin(0.5, 0.78).setDepth(m.y * T + 10)
       const etiqueta = s.add.text(0, 0, m.nombre, { fontFamily: 'monospace', fontSize: '8px', color: '#fff', backgroundColor: '#000000aa', padding: { x: 3, y: 1 } }).setOrigin(0.5, 1).setDepth(9999)
