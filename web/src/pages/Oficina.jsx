@@ -1,105 +1,94 @@
 import { useEffect, useRef, useState } from 'react'
+import Phaser from 'phaser'
 import { supabase } from '../lib/supabase'
 import ChatJefe from '../components/ChatJefe.jsx'
+import OficinaScene, { ANCHO, ALTO } from '../game/OficinaScene.js'
 
-// Oficina: rejilla de 16x9 celdas. Cada agente tiene una mesa y un sprite.
-// Lo que mueve a los sprites es SOLO el estado en Supabase (realtime).
-const COLS = 16, FILAS = 9, CELDA = 56
-
+// La oficina pixel art. Lo que mueve a los personajes es SOLO el estado en Supabase (realtime),
+// que a su vez refleja Paperclip (agentes trabajando, tareas, entregas).
 export default function Oficina() {
-  const canvasRef = useRef(null)
+  const hostRef = useRef(null)
+  const busRef = useRef(null)
   const [agentes, setAgentes] = useState([])
+  const [tareas, setTareas] = useState([])
   const [actividad, setActividad] = useState([])
-  const sprites = useRef({}) // posición animada por agente
+  const [sel, setSel] = useState(null)
 
+  // --- Phaser ---
+  useEffect(() => {
+    const bus = new Phaser.Events.EventEmitter()
+    busRef.current = bus
+    const game = new Phaser.Game({
+      type: Phaser.AUTO, parent: hostRef.current, width: ANCHO, height: ALTO, pixelArt: true, roundPixels: true,
+      backgroundColor: '#0f1116', scene: [new OficinaScene(bus)],
+      scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
+    })
+    bus.on('click-agente', (id) => setSel(id))
+    return () => { game.destroy(true); busRef.current = null }
+  }, [])
+
+  // --- datos ---
   useEffect(() => {
     cargar()
-    const ch = supabase.channel('oficina')
+    const ch = supabase.channel('oficina-px')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'agentes' }, cargar)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'tareas' }, cargar)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'actividad' }, (p) => {
-        setActividad(a => [p.new, ...a].slice(0, 30))
+        setActividad(a => [p.new, ...a].slice(0, 40))
+        if (p.new.agente_id && busRef.current) busRef.current.emit('bocadillo', { id: p.new.agente_id, texto: textoAccion(p.new) })
+      })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'mensajes' }, (p) => {
+        const m = p.new
+        if (m.de && m.de !== 'ivan' && m.de !== 'sistema' && busRef.current) busRef.current.emit('bocadillo', { id: m.de, texto: '💬 ' + m.contenido })
       })
       .subscribe()
     return () => supabase.removeChannel(ch)
   }, [])
 
   async function cargar() {
-    const { data } = await supabase.from('agentes').select('*').order('id')
-    setAgentes(data || [])
-    const { data: act } = await supabase.from('actividad').select('*').order('creado_en', { ascending: false }).limit(30)
-    setActividad(act || [])
+    const [{ data: ag }, { data: ta }, { data: act }] = await Promise.all([
+      supabase.from('agentes').select('*').order('id'),
+      supabase.from('tareas').select('*').neq('estado', 'listo').order('actualizado_en', { ascending: false }),
+      supabase.from('actividad').select('*').order('creado_en', { ascending: false }).limit(40),
+    ])
+    setAgentes(ag || []); setTareas(ta || []); setActividad(act || [])
+    const estados = {}
+    for (const a of ag || []) {
+      const t = (ta || []).find(x => x.asignado_a === a.id)
+      estados[a.id] = { estado: a.estado, tarea: t ? t.titulo.replace(/^IVA-\d+ · /, '') : '' }
+    }
+    busRef.current?.emit('estado', estados)
   }
 
-  // Bucle de dibujo
-  useEffect(() => {
-    const canvas = canvasRef.current
-    if (!canvas) return
-    const ctx = canvas.getContext('2d')
-    let raf
-
-    function dibujar() {
-      ctx.clearRect(0, 0, canvas.width, canvas.height)
-      // suelo
-      for (let x = 0; x < COLS; x++) for (let y = 0; y < FILAS; y++) {
-        ctx.fillStyle = (x + y) % 2 ? '#2a2f3a' : '#272c36'
-        ctx.fillRect(x * CELDA, y * CELDA, CELDA, CELDA)
-      }
-      // zonas
-      zona(ctx, 0, 0, 16, 1, '#1d2230', 'IVÁN DIGITAL STUDIO · OFICINA  —  recepción: Telegram @jefe_ids_bot / chat de la derecha')
-      zona(ctx, 13, 7, 3, 2, '#1f3a2a', 'LISTO')
-      zona(ctx, 0, 7, 3, 2, '#3a2a1f', 'ESCUELA')
-
-      for (const a of agentes) {
-        // mesa
-        ctx.fillStyle = '#5b4636'
-        ctx.fillRect(a.mesa_x * CELDA + 6, a.mesa_y * CELDA + 30, CELDA - 12, 20)
-        ctx.fillStyle = '#9aa'
-        ctx.fillRect(a.mesa_x * CELDA + 18, a.mesa_y * CELDA + 14, 20, 14) // monitor
-
-        // destino: trabajando -> mesa; libre -> deambula cerca; esperando -> recepción
-        const s = sprites.current[a.id] ||= { x: a.pos_x * CELDA, y: a.pos_y * CELDA, tx: 0, ty: 0, t: 0 }
-        s.t++
-        if (a.estado === 'trabajando') { s.tx = a.mesa_x * CELDA; s.ty = (a.mesa_y - 1) * CELDA }
-        else if (a.estado === 'esperando') { s.tx = 7 * CELDA; s.ty = 1 * CELDA }
-        else if (s.t % 240 === 0) {
-          s.tx = (a.mesa_x + (Math.random() * 4 - 2) | 0) * CELDA
-          s.ty = (a.mesa_y + (Math.random() * 3 - 1) | 0) * CELDA
-          s.tx = Math.max(0, Math.min((COLS - 1) * CELDA, s.tx))
-          s.ty = Math.max(CELDA, Math.min((FILAS - 2) * CELDA, s.ty))
-        }
-        s.x += (s.tx - s.x) * 0.06
-        s.y += (s.ty - s.y) * 0.06
-
-        // sprite
-        const cx = s.x + CELDA / 2, cy = s.y + CELDA / 2
-        ctx.fillStyle = a.color
-        ctx.beginPath(); ctx.arc(cx, cy - 8, 12, 0, Math.PI * 2); ctx.fill() // cabeza
-        ctx.fillRect(cx - 10, cy + 2, 20, 18) // cuerpo
-        ctx.fillStyle = '#fff'; ctx.font = 'bold 11px system-ui'; ctx.textAlign = 'center'
-        ctx.fillText(a.nombre, cx, cy + 34)
-        if (a.estado === 'trabajando') {
-          ctx.fillStyle = '#ffd666'; ctx.font = '14px system-ui'
-          ctx.fillText('💻', cx + 18, cy - 14)
-        }
-      }
-      raf = requestAnimationFrame(dibujar)
-    }
-    dibujar()
-    return () => cancelAnimationFrame(raf)
-  }, [agentes])
+  const tareasSel = tareas.filter(t => t.asignado_a === sel)
+  const agSel = agentes.find(a => a.id === sel)
 
   return (
     <div className="oficina">
-      <div className="canvas-wrap">
-        <canvas ref={canvasRef} width={COLS * CELDA} height={FILAS * CELDA} />
+      <div className="juego-wrap">
+        <div ref={hostRef} className="juego" />
         <div className="leyenda">
           {agentes.map(a => (
-            <span key={a.id}><i style={{ background: a.color }} /> {a.nombre} · <b className={a.estado}>{a.estado}</b></span>
+            <span key={a.id} onClick={() => setSel(a.id)} style={{ cursor: 'pointer' }}><i style={{ background: a.color }} /> {a.nombre} · <b className={a.estado}>{a.estado}</b></span>
           ))}
+          <span className="muted">Haz clic en un personaje para ver qué está haciendo.</span>
         </div>
       </div>
       <aside className="lateral">
-        <ChatJefe />
+        {agSel ? (
+          <div className="card">
+            <div className="fila"><h3 style={{ margin: 0 }}><i className="punto" style={{ background: agSel.color }} /> {agSel.nombre}</h3><span className="espacio" /><button className="link" onClick={() => setSel(null)}>cerrar</button></div>
+            <p className="muted">{agSel.rol} · {agSel.descripcion}</p>
+            <b>Tareas en su mesa</b>
+            {tareasSel.length === 0 && <div className="muted">Nada ahora mismo.</div>}
+            {tareasSel.map(t => (
+              <div key={t.id} className="tarjeta">
+                <b>{t.titulo}</b>
+                <div className="muted">{t.estado}{t.paperclip_identifier && <> · <a href={`https://oficina-49-12-251-2.sslip.io/IVA/issues/${t.paperclip_identifier}`} target="_blank" rel="noreferrer">Paperclip ↗</a></>}</div>
+              </div>
+            ))}
+          </div>
+        ) : <ChatJefe />}
         <h3>Actividad</h3>
         <ul className="actividad">
           {actividad.map(a => (
@@ -111,9 +100,6 @@ export default function Oficina() {
   )
 }
 
-function zona(ctx, x, y, w, h, color, texto) {
-  ctx.fillStyle = color
-  ctx.fillRect(x * CELDA, y * CELDA, w * CELDA, h * CELDA)
-  ctx.fillStyle = '#8891a5'; ctx.font = '11px system-ui'; ctx.textAlign = 'left'
-  ctx.fillText(texto, x * CELDA + 8, y * CELDA + 16)
+function textoAccion(a) {
+  return ({ empieza: '⚡ Me pongo con ello', entrega: '✅ Entregado', falla: '⚠️ Me he atascado', recibe_tarea: '📥 Tarea nueva', asigna: '📤 Asignando…', crea_tarea: '📝 Creo la tarea' })[a.accion] || a.accion
 }

@@ -29,7 +29,11 @@ main { padding:20px; }
 
 /* OFICINA */
 .oficina { display:grid; grid-template-columns: 1fr 360px; gap:20px; }
-.canvas-wrap canvas { border:1px solid var(--borde); border-radius:12px; max-width:100%; }
+.juego-wrap { min-width:0; }
+.juego { width:100%; aspect-ratio: 40 / 22; border:2px solid #2b3140; border-radius:10px; overflow:hidden; background:#0f1116; image-rendering: pixelated; }
+.juego canvas { image-rendering: pixelated; image-rendering: crisp-edges; display:block; }
+.punto { display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:6px; }
+.leyenda .muted { margin-left:auto; }
 .leyenda { display:flex; gap:18px; margin-top:10px; font-size:13px; }
 .leyenda i { display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:4px; }
 .leyenda b.trabajando { color:#7ed321; } .leyenda b.libre { color:var(--muted); } .leyenda b.esperando { color:var(--acento); }
