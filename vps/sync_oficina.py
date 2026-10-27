@@ -322,6 +322,67 @@ def en_vivo():
             for v in viejas: requests.delete(f"{SB_URL}/rest/v1/en_vivo?id=eq.{v['id']}", headers=sb.h(), timeout=20)
         except Exception: pass
 
+# ---------- APROBACIONES: preguntas/confirmaciones de los agentes -> panel de Iván ----------
+AVISADAS = set()
+def aprobaciones(ids):
+    # 1) Paperclip -> Supabase
+    rows = []
+    for it in q("select it.id, it.issue_id, it.kind, it.status, it.payload, i.identifier, i.assignee_agent_id from issue_thread_interactions it join issues i on i.id=it.issue_id where it.created_at > now() - interval '7 days'"):
+        pl = it["payload"] or {}
+        if it["kind"] == "request_confirmation":
+            pregunta = pl.get("prompt") or "Confirmación"; opciones = [{"id": "si", "label": "Aprobar"}, {"id": "no", "label": "Rechazar"}]
+        elif it["kind"] == "ask_user_questions":
+            qs = pl.get("questions") or []
+            if not qs: continue
+            pregunta = "\n".join(f"• {qq.get('prompt','')}" for qq in qs); opciones = [{"id": o.get("id"), "label": o.get("label")} for o in (qs[0].get("options") or [])]
+            if i_es_onboarding(pregunta): continue
+        else: continue
+        estado = "pendiente" if it["status"] == "pending" else ("aprobada" if it["status"] in ("accepted", "answered", "resolved") else "rechazada")
+        rows.append({"id": it["id"], "fuente": "interaccion", "issue_id": it["issue_id"], "tarea": it["identifier"], "agente_id": ids.get(it["assignee_agent_id"]),
+                     "pregunta": pregunta[:2000], "opciones": opciones, "estado": estado})
+    for ap in q("select a.id, a.type, a.status, a.payload, a.requested_by_agent_id from approvals a where a.created_at > now() - interval '7 days'"):
+        pl = ap["payload"] or {}
+        pregunta = pl.get("title") or pl.get("summary") or pl.get("description") or f"Aprobación: {ap['type']}"
+        estado = "pendiente" if ap["status"] == "pending" else ("aprobada" if ap["status"] == "approved" else "rechazada")
+        rows.append({"id": ap["id"], "fuente": "aprobacion", "issue_id": None, "tarea": None, "agente_id": ids.get(ap["requested_by_agent_id"]),
+                     "pregunta": str(pregunta)[:2000], "opciones": [{"id": "si", "label": "Aprobar"}, {"id": "no", "label": "Rechazar"}], "estado": estado})
+    # no pisar las que Iván ya decidió en la web y aún no se han procesado
+    decididas = {a["id"] for a in sb.get("aprobaciones", "procesada=eq.false&decision=not.is.null&select=id")}
+    rows = [r for r in rows if r["id"] not in decididas]
+    if rows: sb.upsert("aprobaciones", rows, on="id")
+    # aviso por Telegram de las nuevas pendientes
+    for r in rows:
+        if r["estado"] == "pendiente" and r["id"] not in AVISADAS:
+            AVISADAS.add(r["id"])
+            tg(f"🙋 {r['agente_id'] or 'Un agente'} necesita tu OK ({r['tarea'] or 'oficina'}):\n{r['pregunta'][:600]}\n\nApruébalo en la oficina (panel Pendiente de tu OK) o respóndeme: \"{r['tarea']} aprobado\" / \"{r['tarea']} rechazado: motivo\".")
+    # 2) Supabase -> Paperclip (decisiones de Iván)
+    for a in sb.get("aprobaciones", "procesada=eq.false&decision=not.is.null&select=*"):
+        ok = False
+        try:
+            if a["fuente"] == "interaccion":
+                it = q("select kind from issue_thread_interactions where id=%s", a["id"])
+                kind = it[0]["kind"] if it else "request_confirmation"
+                if kind == "request_confirmation":
+                    if a["decision"] == "si": cmd = ["issue", "interaction:accept", a["issue_id"], a["id"], "-C", COMPANY, "--json"]
+                    else: cmd = ["issue", "interaction:reject", a["issue_id"], a["id"], "-C", COMPANY, "--reason", a.get("nota") or "Rechazado por Iván", "--json"]
+                else:
+                    qid = (q("select payload from issue_thread_interactions where id=%s", a["id"])[0]["payload"].get("questions") or [{}])[0].get("id")
+                    cmd = ["issue", "interaction:respond", a["issue_id"], a["id"], "-C", COMPANY, "--answers-json", json.dumps([{"questionId": qid, "selectedOptionIds": [a["decision"]] if a["decision"] not in ("si", "no") else [], "freeText": a.get("nota") or ""}]), "--json"]
+                r = cli(*cmd); ok = r.returncode == 0
+                if not ok: print("interaccion fallo:", r.stderr[-300:], r.stdout[-200:])
+                if a.get("nota"):
+                    cli("issue", "comment", a["issue_id"], "-C", COMPANY, "--body", f"Iván: {a['nota']}", "--json")
+            else:
+                r = cli("approval", "approve" if a["decision"] == "si" else "reject", a["id"], "-C", COMPANY, "--json"); ok = r.returncode == 0
+                if not ok: print("approval fallo:", r.stderr[-300:])
+        except Exception as e: print("aprobacion fallo:", e)
+        sb.patch("aprobaciones", f"id=eq.{a['id']}", {"procesada": True, "estado": ("aprobada" if a["decision"] == "si" else "rechazada") if ok else "pendiente", "decision": a["decision"] if ok else None})
+        if ok:
+            print("decision aplicada", a["tarea"], a["decision"])
+            if a.get("agente_id"): cli("agent", "wake", {"jefe": "Jefe", "tiendas": "Tiendas", "creador": "Creador", "editor": "Editor"}[a["agente_id"]], "-C", COMPANY)
+
+def i_es_onboarding(texto): return "What would you like to do" in texto
+
 def mensajes_web_nuevos():
     for m in sb.get("mensajes", "procesado=eq.false&de=eq.ivan&para=eq.jefe&select=*"):
         args = ["agent-prompt", "Jefe", JEFE_KEY]
@@ -417,6 +478,7 @@ def loop():
             sync_actividad(ids, tarea_ids)
             tareas_web_nuevas()
             movimientos_web()
+            aprobaciones(ids)
             mensajes_web_nuevos()
             cambio_modelo_pendiente()
             avisos_terminadas(ids)
