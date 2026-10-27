@@ -351,6 +351,23 @@ def correcciones_web():
         except Exception as e: print("correccion fallo:", e)
         sb.patch("tareas", f"id=eq.{t['id']}", {"correccion": None})
 
+def podar_sesiones():
+    """AHORRO: una sesión de Claude que crece mucho encarece cada turno (relee todo el historial).
+    Si el agente está libre y su sesión pasa de 350 KB, se borra: la siguiente ejecución empieza ligera."""
+    libres = {AGENTES[a["name"]] for a in q("select name,status from agents") if a["status"] not in ("running", "working", "active") and a["name"] in AGENTES}
+    for slug in libres:
+        base = f"/home/oficina/.claude-agentes/{slug}/projects"
+        if not os.path.isdir(base): continue
+        for root, _, files in os.walk(base):
+            for f in files:
+                if not f.endswith(".jsonl"): continue
+                pth = os.path.join(root, f)
+                try:
+                    st = os.stat(pth)
+                    if st.st_size > 350_000 or time.time() - st.st_mtime > 2 * 86400:
+                        os.remove(pth); print("sesion podada", slug, f[:8], st.st_size // 1000, "KB")
+                except OSError: pass
+
 def cambio_modelo_pendiente():
     """Si hay /root/cambio_modelo_pendiente, aplica ese modelo a todos los agentes en cuanto no haya trabajo en curso."""
     f = "/root/cambio_modelo_pendiente"
@@ -604,6 +621,7 @@ def loop():
             cambio_modelo_pendiente()
             avisos_terminadas(ids); avisos_revision(ids)
             if n % 6 == 0: escuela()
+            if n % 12 == 0: podar_sesiones()
         except Exception:
             traceback.print_exc()
         n += 1; sys.stdout.flush(); time.sleep(5)

@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# Herramienta de UN SOLO PASO para que los agentes actualicen su tarea en Paperclip.
+# Usa las variables que Paperclip inyecta en cada ejecución (PAPERCLIP_API_URL, PAPERCLIP_API_KEY, PAPERCLIP_TASK_ID, PAPERCLIP_RUN_ID).
+#
+#   tarea entregar "texto corto (≤8 líneas, con la ruta del archivo)"   -> comentario + estado 'in_review' (Iván revisa)
+#   tarea ok "qué vas a hacer" <créditos>                                 -> pide el OK de gasto a Iván + estado 'blocked'
+#   tarea pregunta "pregunta" "opción 1|opción 2|opción 3"                -> pregunta con opciones a Iván + estado 'blocked'
+#   tarea nota "texto"                                                    -> solo comentario (úsalo poco: cada comentario cuesta)
+#   tarea empezar                                                         -> estado 'in_progress'
+set -euo pipefail
+: "${PAPERCLIP_API_URL:?}" "${PAPERCLIP_API_KEY:?}" "${PAPERCLIP_TASK_ID:?}"
+U="$PAPERCLIP_API_URL/api/issues/$PAPERCLIP_TASK_ID"
+H=(-s -H "Authorization: Bearer $PAPERCLIP_API_KEY" -H "Content-Type: application/json" -H "X-Paperclip-Run-Id: ${PAPERCLIP_RUN_ID:-}")
+j() { python3 -c 'import json,sys; print(json.dumps(sys.argv[1]))' "$1"; }
+cmd="${1:-}"; shift || true
+case "$cmd" in
+  entregar)
+    txt="${1:?texto}"
+    curl "${H[@]}" -X PATCH "$U" -d "{\"status\":\"in_review\",\"comment\":$(j "$txt")}" >/dev/null && echo "OK entregada (en revisión de Iván)";;
+  ok)
+    txt="${1:?texto}"; cr="${2:?creditos}"
+    curl "${H[@]}" -X POST "$U/interactions" -d "{\"kind\":\"request_confirmation\",\"idempotencyKey\":\"ok-$(date +%s)\",\"continuationPolicy\":\"wake_assignee\",\"payload\":{\"version\":1,\"prompt\":$(j "$txt — Coste: $cr créditos de Higgsfield."),\"acceptLabel\":\"Aprobado, adelante\",\"rejectLabel\":\"No\"}}" >/dev/null
+    curl "${H[@]}" -X PATCH "$U" -d '{"status":"blocked"}' >/dev/null && echo "OK pedido el OK a Iván ($cr cr). PARA AQUÍ: no hagas nada más hasta que responda.";;
+  pregunta)
+    txt="${1:?pregunta}"; ops="${2:?opciones separadas por |}"
+    opts=$(python3 -c 'import json,sys; print(json.dumps([{"id":f"o{i}","label":o.strip()} for i,o in enumerate(sys.argv[1].split("|")) if o.strip()]))' "$ops")
+    curl "${H[@]}" -X POST "$U/interactions" -d "{\"kind\":\"ask_user_questions\",\"idempotencyKey\":\"q-$(date +%s)\",\"continuationPolicy\":\"wake_assignee\",\"payload\":{\"version\":1,\"questions\":[{\"id\":\"q\",\"prompt\":$(j "$txt"),\"selectionMode\":\"single\",\"options\":$opts}]}}" >/dev/null
+    curl "${H[@]}" -X PATCH "$U" -d '{"status":"blocked"}' >/dev/null && echo "OK pregunta enviada a Iván. PARA AQUÍ hasta que responda.";;
+  nota)
+    txt="${1:?texto}"
+    curl "${H[@]}" -X POST "$U/comments" -d "{\"body\":$(j "$txt")}" >/dev/null && echo "OK nota";;
+  empezar)
+    curl "${H[@]}" -X PATCH "$U" -d '{"status":"in_progress"}' >/dev/null && echo "OK en curso";;
+  *) sed -n 2,10p "$0"; exit 1;;
+esac

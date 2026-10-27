@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# Espera a que termine un job de Higgsfield y lo descarga, en UNA sola llamada y sin ruido.
+#   hf_esperar <job_id> <destino.mp4|.jpg> [max_segundos=900]
+# Imprime una sola línea: "OK <destino> <ancho>x<alto> <segundos>s" o "ERROR ...".
+set -uo pipefail
+job="${1:?job_id}"; dest="${2:?destino}"; max="${3:-900}"
+t=0
+while [ "$t" -lt "$max" ]; do
+  out=$(higgsfield generate get "$job" 2>&1)
+  st=$(printf '%s' "$out" | grep -oiE '"?status"?[": ]+[a-z_]+' | head -1 | grep -oiE '[a-z_]+$')
+  case "$st" in
+    completed|succeeded|success|done) break;;
+    failed|error|cancelled|canceled|nsfw|ip_detected) echo "ERROR job $job: $st"; printf '%s\n' "$out" | tail -3; exit 1;;
+  esac
+  sleep 12; t=$((t+12))
+done
+[ "$t" -ge "$max" ] && { echo "ERROR job $job: tiempo agotado ($max s), sigue '$st'"; exit 1; }
+url=$(printf '%s' "$out" | grep -oE 'https://[^" ]+\.(mp4|jpg|jpeg|png|webp)' | head -1)
+[ -z "$url" ] && { echo "ERROR job $job: terminado pero sin URL"; printf '%s\n' "$out" | tail -5; exit 1; }
+mkdir -p "$(dirname "$dest")"
+curl -s -L -o "$dest" "$url" || { echo "ERROR descargando $url"; exit 1; }
+info=$(ffprobe -v error -select_streams v:0 -show_entries stream=width,height -show_entries format=duration -of json "$dest" 2>/dev/null | python3 -c 'import json,sys
+try:
+  d=json.load(sys.stdin); s=d["streams"][0]; print(f"{s.get(\"width\")}x{s.get(\"height\")} {round(float(d[\"format\"].get(\"duration\",0)),1)}s")
+except Exception: print("")')
+echo "OK $dest $info"
