@@ -402,10 +402,10 @@ def escuela():
 def loop():
     n = 0
     # al arrancar, no re-publicar vueltas antiguas
-    for r in q("select id, log_ref from heartbeat_runs where created_at > now() - interval '6 hours'"):
+    for r in q("select id, log_ref, status from heartbeat_runs where created_at > now() - interval '6 hours'"):
         p = os.path.join("/home/oficina/.paperclip/instances/default/data/run-logs", r["log_ref"] or "")
         VIVO[r["id"]] = {"off": os.path.getsize(p) if os.path.exists(p) else 0, "buf": "", "nuevo": False}
-        if r["id"]: VIVO_FIN.add(r["id"])
+        if r["status"] not in ("running", "queued"): VIVO_FIN.add(r["id"])
     while True:
         try:
             ids = {a["id"]: AGENTES.get(a["name"]) for a in q("select id,name from agents")}
