@@ -10,26 +10,28 @@
 set -euo pipefail
 : "${PAPERCLIP_API_URL:?}" "${PAPERCLIP_API_KEY:?}" "${PAPERCLIP_TASK_ID:?}"
 U="$PAPERCLIP_API_URL/api/issues/$PAPERCLIP_TASK_ID"
+IVAN="${PAPERCLIP_IVAN_USER_ID:-ZDEFzCdEaUcenwUClaDjR8rFxqC4JOSN}"   # revisor humano: Paperclip exige un dueño de la revisión
+api() { local out; out=$(curl "${H[@]}" -w '\n%{http_code}' "$@"); local code=${out##*$'\n'}; [ "${code:0:1}" = 2 ] || { echo "ERROR API $code: $(printf '%s' "$out" | head -c 300)"; return 1; }; }
 H=(-s -H "Authorization: Bearer $PAPERCLIP_API_KEY" -H "Content-Type: application/json" -H "X-Paperclip-Run-Id: ${PAPERCLIP_RUN_ID:-}")
 j() { python3 -c 'import json,sys; print(json.dumps(sys.argv[1]))' "$1"; }
 cmd="${1:-}"; shift || true
 case "$cmd" in
   entregar)
     txt="${1:?texto}"
-    curl "${H[@]}" -X PATCH "$U" -d "{\"status\":\"in_review\",\"comment\":$(j "$txt")}" >/dev/null && echo "OK entregada (en revisión de Iván)";;
+    api -X PATCH "$U" -d "{\"status\":\"in_review\",\"assigneeUserId\":\"$IVAN\",\"comment\":$(j "$txt")}" && echo "OK entregada (en revisión de Iván). PARA AQUÍ: no hagas nada más.";;
   ok)
     txt="${1:?texto}"; cr="${2:?creditos}"
-    curl "${H[@]}" -X POST "$U/interactions" -d "{\"kind\":\"request_confirmation\",\"idempotencyKey\":\"ok-$(date +%s)\",\"continuationPolicy\":\"wake_assignee\",\"payload\":{\"version\":1,\"prompt\":$(j "$txt — Coste: $cr créditos de Higgsfield."),\"acceptLabel\":\"Aprobado, adelante\",\"rejectLabel\":\"No\"}}" >/dev/null
-    curl "${H[@]}" -X PATCH "$U" -d '{"status":"blocked"}' >/dev/null && echo "OK pedido el OK a Iván ($cr cr). PARA AQUÍ: no hagas nada más hasta que responda.";;
+    api -X POST "$U/interactions" -d "{\"kind\":\"request_confirmation\",\"idempotencyKey\":\"ok-$(date +%s)\",\"continuationPolicy\":\"wake_assignee\",\"payload\":{\"version\":1,\"prompt\":$(j "$txt — Coste: $cr créditos de Higgsfield."),\"acceptLabel\":\"Aprobado, adelante\",\"rejectLabel\":\"No\"}}" >/dev/null
+    api -X PATCH "$U" -d '{"status":"blocked"}' && echo "OK pedido el OK a Iván ($cr cr). PARA AQUÍ: no hagas nada más hasta que responda.";;
   pregunta)
     txt="${1:?pregunta}"; ops="${2:?opciones separadas por |}"
     opts=$(python3 -c 'import json,sys; print(json.dumps([{"id":f"o{i}","label":o.strip()} for i,o in enumerate(sys.argv[1].split("|")) if o.strip()]))' "$ops")
-    curl "${H[@]}" -X POST "$U/interactions" -d "{\"kind\":\"ask_user_questions\",\"idempotencyKey\":\"q-$(date +%s)\",\"continuationPolicy\":\"wake_assignee\",\"payload\":{\"version\":1,\"questions\":[{\"id\":\"q\",\"prompt\":$(j "$txt"),\"selectionMode\":\"single\",\"options\":$opts}]}}" >/dev/null
-    curl "${H[@]}" -X PATCH "$U" -d '{"status":"blocked"}' >/dev/null && echo "OK pregunta enviada a Iván. PARA AQUÍ hasta que responda.";;
+    api -X POST "$U/interactions" -d "{\"kind\":\"ask_user_questions\",\"idempotencyKey\":\"q-$(date +%s)\",\"continuationPolicy\":\"wake_assignee\",\"payload\":{\"version\":1,\"questions\":[{\"id\":\"q\",\"prompt\":$(j "$txt"),\"selectionMode\":\"single\",\"options\":$opts}]}}" >/dev/null
+    api -X PATCH "$U" -d '{"status":"blocked"}' && echo "OK pregunta enviada a Iván. PARA AQUÍ hasta que responda.";;
   nota)
     txt="${1:?texto}"
-    curl "${H[@]}" -X POST "$U/comments" -d "{\"body\":$(j "$txt")}" >/dev/null && echo "OK nota";;
+    api -X POST "$U/comments" -d "{\"body\":$(j "$txt")}" && echo "OK nota";;
   empezar)
-    curl "${H[@]}" -X PATCH "$U" -d '{"status":"in_progress"}' >/dev/null && echo "OK en curso";;
+    api -X PATCH "$U" -d '{"status":"in_progress"}' && echo "OK en curso";;
   *) sed -n 2,10p "$0"; exit 1;;
 esac
