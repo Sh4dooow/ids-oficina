@@ -151,8 +151,16 @@ def mensajes_web_nuevos():
             except Exception: pass
         else: print("mensaje fallo:", r.stderr[-300:])
 
+def slugify(s):
+    s = re.sub(r"[^a-z0-9]+", "-", s.lower().encode("ascii", "ignore").decode()).strip("-")
+    return s[:60] or "skill"
+
 def escuela():
-    """Compone AGENTS.md = ROL.md (base) + lecciones activas de la Escuela."""
+    """Escuela -> agentes.
+    - tipo skill_base  -> archivo real .claude/skills/<slug>/SKILL.md en la carpeta del agente (Claude Code la carga cuando toca)
+    - resto (leccion/correccion/ejemplo) -> se añaden al AGENTS.md = ROL.md + lecciones
+    """
+    import shutil
     ids_by_name = {a["name"]: a["id"] for a in q("select id,name from agents")}
     lecc = sb.get("lecciones", "select=agente_id,titulo,contenido,tipo,activa,orden,creado_en&order=orden,creado_en")
     por = {}
@@ -161,16 +169,44 @@ def escuela():
     for name, slug in AGENTES.items():
         aid = ids_by_name.get(name);
         if not aid: continue
+        # --- skills ---
+        sdir = os.path.join(ROLES_DIR, slug, ".claude", "skills"); os.makedirs(sdir, exist_ok=True)
+        skills = [l for l in por.get(slug, []) if l["tipo"] == "skill_base"]
+        deseadas = set()
+        for l in skills:
+            sk = slugify(l["titulo"]); deseadas.add(sk)
+            body = l["contenido"]
+            if not body.lstrip().startswith("---"):
+                body = f"---\nname: {sk}\ndescription: {l['titulo']}\n---\n\n" + body
+            d = os.path.join(sdir, sk)
+            if os.path.islink(d): os.unlink(d)
+            os.makedirs(d, exist_ok=True)
+            p = os.path.join(d, "SKILL.md")
+            if not os.path.exists(p) or open(p).read() != body:
+                open(p, "w").write(body); print("escuela skill ->", name, sk)
+        # skills que ya no están en la Escuela (y que la Escuela gestiona) se retiran
+        if skills:
+            for e in os.listdir(sdir):
+                if e not in deseadas:
+                    pth = os.path.join(sdir, e)
+                    if os.path.islink(pth): os.unlink(pth)
+                    elif os.path.isdir(pth): shutil.rmtree(pth)
+                    print("escuela skill retirada ->", name, e)
+        subprocess.run(["chown", "-R", "oficina:oficina", os.path.join(ROLES_DIR, slug)])
+        # --- lecciones en AGENTS.md ---
         rol = os.path.join(ROLES_DIR, slug, "ROL.md")
         if not os.path.exists(rol): continue
         base = open(rol).read()
-        extra = "\n\n# LO QUE IVÁN TE HA ENSEÑADO EN LA ESCUELA (obligatorio)\n" + "\n\n".join(
-            f"## [{l['tipo']}] {l['titulo']}\n{l['contenido']}" for l in por.get(slug, [])) if por.get(slug) else ""
+        otras = [l for l in por.get(slug, []) if l["tipo"] != "skill_base"]
+        extra = ("\n\n# LO QUE IVÁN TE HA ENSEÑADO EN LA ESCUELA (obligatorio)\n" + "\n\n".join(
+            f"## [{l['tipo']}] {l['titulo']}\n{l['contenido']}" for l in otras)) if otras else ""
+        if skills:
+            extra += "\n\n# TUS SKILLS\nTienes estas skills en `.claude/skills/` (cárgalas con la herramienta Skill cuando la tarea lo requiera): " + ", ".join(sorted(deseadas)) + "."
         path = os.path.join(AG_BASE, aid, "instructions", "AGENTS.md")
         nuevo = base + extra
         try:
             if open(path).read() != nuevo:
-                open(path, "w").write(nuevo); print("escuela ->", name, len(por.get(slug, [])), "lecciones")
+                open(path, "w").write(nuevo); print("escuela ->", name, len(otras), "lecciones")
         except FileNotFoundError: pass
 
 def loop():
