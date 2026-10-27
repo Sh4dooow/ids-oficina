@@ -29,6 +29,7 @@ export default function App() {
           <NavLink to="/productos">📦 Productos</NavLink>
           <NavLink to="/escuela">🎓 Escuela</NavLink>
         </nav>
+        <a className="link" href="https://oficina-49-12-251-2.sslip.io" target="_blank" rel="noreferrer">⚙️ Paperclip</a>
         <button className="link" onClick={() => supabase.auth.signOut()}>Salir</button>
       </header>
       <main>

@@ -66,7 +66,14 @@ OFICINA/
       fotos/  referencias/  clips/  final/
 ```
 
-## Siguiente paso (fase 2): manos para los agentes
+## Producción (fase 2, ya montada)
+Los agentes reales corren en el VPS (Hetzner) con **Paperclip** (la empresa) y **OpenClaw** (el Jefe en Telegram):
+- Panel Paperclip: https://oficina-49-12-251-2.sslip.io
+- Telegram: @jefe_ids_bot
+- `vps/install.sh` instala todo; `vps/sync_oficina.py` es el puente que mantiene esta web (Supabase) y Paperclip sincronizados: agentes, tareas, mensajes y la Escuela (las lecciones se inyectan en el AGENTS.md de cada agente).
+- La carpeta `server/` (orquestador local de la fase 1) ya no hace falta; se deja por si se quiere trabajar sin VPS.
+
+## Siguiente paso (fase 3): manos para los agentes
 Ahora mismo los agentes razonan y entregan texto (instrucciones, prompts, copys).
 En `server/src/agentes.js` → `agenteTrabaja()` es donde se enchufan herramientas reales
 con el Claude Agent SDK + MCP: Shopify (Tiendas), Higgsfield (Creador), ffmpeg + Drive

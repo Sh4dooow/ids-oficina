@@ -36,7 +36,13 @@ export default function Tablero() {
 
   async function mover(id, estado) {
     const col = ESTADOS.find(e => e.id === estado)
+    const t = tareas.find(x => x.id === id)
     await supabase.from('tareas').update({ estado, asignado_a: col.agente }).eq('id', id)
+    // Si la tarea vive en Paperclip, se lo pedimos al Jefe (el puente lo convierte en comentario)
+    if (t?.paperclip_id) {
+      const destino = col.agente ? `pásala a ${col.agente}` : 'dala por terminada (listo)'
+      await supabase.from('mensajes').insert({ de: 'ivan', para: 'jefe', tarea_id: id, contenido: `Iván ha movido esta tarea en el tablero: ${destino}.`, tipo: 'texto' })
+    }
   }
 
   return (
@@ -91,7 +97,9 @@ function DetalleTarea({ tarea, cerrar }) {
       <div className="card" onClick={e => e.stopPropagation()}>
         <h2>{tarea.titulo}</h2>
         <p>{tarea.descripcion}</p>
-        <p className="muted">Estado: {tarea.estado} · Asignado: {tarea.asignado_a || '—'}</p>
+        <p className="muted">Estado: {tarea.estado} · Asignado: {tarea.asignado_a || '—'}
+          {tarea.paperclip_identifier && <> · <a href={`https://oficina-49-12-251-2.sslip.io/IVA/issues/${tarea.paperclip_identifier}`} target="_blank" rel="noreferrer">ver en Paperclip ↗</a></>}
+        </p>
         {tarea.resultado && Object.keys(tarea.resultado).length > 0 && (
           <pre className="resultado">{JSON.stringify(tarea.resultado, null, 2)}</pre>
         )}

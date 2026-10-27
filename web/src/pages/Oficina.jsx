@@ -45,7 +45,7 @@ export default function Oficina() {
         ctx.fillRect(x * CELDA, y * CELDA, CELDA, CELDA)
       }
       // zonas
-      zona(ctx, 0, 0, 16, 1, '#1d2230', 'RECEPCIÓN · aquí entran las tareas')
+      zona(ctx, 0, 0, 16, 1, '#1d2230', 'IVÁN DIGITAL STUDIO · OFICINA  —  recepción: Telegram @jefe_ids_bot / chat de la derecha')
       zona(ctx, 13, 7, 3, 2, '#1f3a2a', 'LISTO')
       zona(ctx, 0, 7, 3, 2, '#3a2a1f', 'ESCUELA')
 
