@@ -474,10 +474,11 @@ def aprobaciones(ids):
     # no pisar las que Iván ya decidió en la web y aún no se han procesado
     decididas = {a["id"] for a in sb.get("aprobaciones", "procesada=eq.false&decision=not.is.null&select=id")}
     rows = [r for r in rows if r["id"] not in decididas]
+    ya_conocidas = {a["id"] for a in sb.get("aprobaciones", "select=id")}  # persistente: sobrevive a reinicios del puente
     if rows: sb.upsert("aprobaciones", rows, on="id")
-    # aviso por Telegram de las nuevas pendientes
+    # aviso (campana + Telegram) SOLO de las nuevas pendientes
     for r in rows:
-        if r["estado"] == "pendiente" and r["id"] not in AVISADAS:
+        if r["estado"] == "pendiente" and r["id"] not in AVISADAS and r["id"] not in ya_conocidas:
             AVISADAS.add(r["id"])
             aviso("ok", f"🙋 {r['agente_id'] or 'Un agente'} necesita tu OK ({r['tarea'] or 'oficina'})", f"{r['pregunta'][:600]}\n\nApruébalo en la oficina (panel Pendiente de tu OK) o respóndeme: \"{r['tarea']} aprobado\" / \"{r['tarea']} rechazado: motivo\".", r["tarea"], r["agente_id"])
     # 2) Supabase -> Paperclip (decisiones de Iván)
