@@ -287,6 +287,25 @@ def movimientos_web():
             print("mover fallo:", e)
         sb.patch("tareas", f"id=eq.{t['id']}", {"mover_a": None})
 
+def correcciones_web():
+    """Iván dice desde la oficina qué está mal en una entrega -> comentario al agente, tarea vuelve a 'en curso', y lección opcional."""
+    ids_name = {a["id"]: a["name"] for a in q("select id,name from agents")}
+    for t in sb.get("tareas", "correccion=not.is.null&paperclip_id=not.is.null&select=id,paperclip_id,paperclip_identifier,correccion,correccion_leccion,asignado_a"):
+        try:
+            i = q("select assignee_agent_id,title from issues where id=%s", t["paperclip_id"])
+            agente = ids_name.get(i[0]["assignee_agent_id"]) if i else None
+            q("insert into issue_comments (id,company_id,issue_id,author_user_id,body,created_at,updated_at,author_type) values (gen_random_uuid(),%s,%s,%s,%s,now(),now(),'user')",
+              COMPANY, t["paperclip_id"], ENV.get("PAPERCLIP_USER_ID", "ZDEFzCdEaUcenwUClaDjR8rFxqC4JOSN"),
+              f"Iván ha revisado la entrega y NO le vale. Corrección:\n{t['correccion']}\n\nCorrígelo (pide OK antes de gastar créditos) y vuelve a dejarla en revisión.")
+            q("update issues set status='in_progress', updated_at=now() where id=%s", t["paperclip_id"])
+            if agente: cli("agent", "wake", agente, "-C", COMPANY)
+            if t.get("correccion_leccion") and t.get("asignado_a"):
+                sb.insert("lecciones", {"agente_id": t["asignado_a"], "titulo": ("Corrección " + (t.get("paperclip_identifier") or "") + ": " + t["correccion"][:90]).strip(), "contenido": t["correccion"], "tipo": "correccion", "orden": 999})
+            sb.patch("tareas", f"id=eq.{t['id']}", {"avisado_revision": False})
+            print("correccion enviada", t.get("paperclip_identifier"))
+        except Exception as e: print("correccion fallo:", e)
+        sb.patch("tareas", f"id=eq.{t['id']}", {"correccion": None})
+
 def cambio_modelo_pendiente():
     """Si hay /root/cambio_modelo_pendiente, aplica ese modelo a todos los agentes en cuanto no haya trabajo en curso."""
     f = "/root/cambio_modelo_pendiente"
@@ -533,7 +552,7 @@ def loop():
             sync_comentarios(ids, tarea_ids)
             sync_actividad(ids, tarea_ids)
             tareas_web_nuevas()
-            movimientos_web()
+            movimientos_web(); correcciones_web()
             aprobaciones(ids)
             mensajes_web_nuevos()
             cambio_modelo_pendiente()

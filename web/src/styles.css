@@ -153,3 +153,9 @@ main { padding: 12px 16px; }
 .aviso-item { background:#11141a; border-radius:10px; padding:8px 10px; border-left:3px solid #f5a524; cursor:pointer; }
 .aviso-item.leido { opacity:.55; border-left-color:transparent; cursor:default; }
 .aviso-item .pre { white-space:pre-wrap; margin-top:4px; font-size:13px; }
+
+.aviso-acciones { margin-top:8px; }
+.aviso-acciones .fila { gap:8px; flex-wrap:wrap; }
+.aviso-corregir { display:flex; flex-direction:column; gap:6px; }
+.aviso-corregir textarea { width:100%; background:#0b0d12; color:inherit; border:1px solid var(--borde); border-radius:8px; padding:8px; font:inherit; resize:vertical; }
+.btn-ok { background:#2ecc71; color:#0b0d12; border:0; border-radius:8px; padding:6px 10px; font-weight:600; cursor:pointer; }
