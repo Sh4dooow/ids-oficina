@@ -379,7 +379,8 @@ def aprobaciones(ids):
                     cmd = ["issue", "interaction:respond", a["issue_id"], a["id"], "--answers-json", json.dumps([{"questionId": qid, "optionIds": sel, "freeText": nota}]), "--json"]
                 r = cli(*cmd); ok = r.returncode == 0
                 if not ok: print("interaccion fallo:", r.stderr[-300:], r.stdout[-200:])
-                if a.get("nota"):
+                # AHORRO: la nota ya viaja en la respuesta (freeText/reason); no duplicar comentario (cada comentario = otra ejecución pagada)
+                if ok and a.get("nota") and kind == "request_confirmation" and a["decision"] == "si":
                     cli("issue", "comment", a["issue_id"], "--body", f"Iván: {a['nota']}", "--json")
             else:
                 r = cli("approval", "approve" if a["decision"] == "si" else "reject", a["id"], "--json"); ok = r.returncode == 0
@@ -390,7 +391,8 @@ def aprobaciones(ids):
         sb.patch("aprobaciones", f"id=eq.{a['id']}", {"procesada": True, "estado": ("aprobada" if a["decision"] == "si" else "rechazada") if ok else "pendiente", "decision": a["decision"] if ok else None})
         if ok:
             print("decision aplicada", a["tarea"], a["decision"])
-            if a.get("agente_id"): cli("agent", "wake", {"jefe": "Jefe", "tiendas": "Tiendas", "creador": "Creador", "editor": "Editor"}[a["agente_id"]], "-C", COMPANY)
+            # AHORRO: las interacciones ya despiertan al asignado (wake_assignee); solo despertar a mano en aprobaciones de gasto
+            if a.get("agente_id") and a["fuente"] != "interaccion": cli("agent", "wake", {"jefe": "Jefe", "tiendas": "Tiendas", "creador": "Creador", "editor": "Editor"}[a["agente_id"]], "-C", COMPANY)
 
 def i_es_onboarding(texto): return "What would you like to do" in texto
 
