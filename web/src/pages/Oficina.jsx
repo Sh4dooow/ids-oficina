@@ -5,6 +5,7 @@ import ChatJefe from '../components/ChatJefe.jsx'
 import Personalizar from '../components/Personalizar.jsx'
 import EnVivo from '../components/EnVivo.jsx'
 import Aprobaciones from '../components/Aprobaciones.jsx'
+import Avisos from '../components/Avisos.jsx'
 import OficinaScene, { ANCHO, ALTO } from '../game/OficinaScene.js'
 
 export default function Oficina() {
@@ -80,6 +81,7 @@ export default function Oficina() {
           </button>
         ))}
         <span className="espacio" />
+        <Avisos />
         <button className="btn-sec" onClick={() => setChatAbierto(v => !v)}>💬 Hablar con el Jefe</button>
       </div>
 

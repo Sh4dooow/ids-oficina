@@ -59,6 +59,12 @@ pg.autocommit = True
 OFICINA = "/home/oficina/oficina/OFICINA"
 WHISPER_PY = "/opt/whisper/bin/python"; YTDLP = "/opt/whisper/bin/yt-dlp"
 
+def aviso(tipo, titulo, texto="", tarea=None, agente=None):
+    """Aviso en la oficina (campana) + Telegram."""
+    try: sb.insert("avisos", {"tipo": tipo, "titulo": titulo, "texto": texto, "tarea_identifier": tarea, "agente_id": agente})
+    except Exception as e: print("aviso web:", e)
+    tg(f"{titulo}\n{texto}".strip())
+
 def tg(texto):
     """Aviso a Iván por Telegram desde el bot del Jefe."""
     try:
@@ -205,6 +211,17 @@ def tareas_web_nuevas():
             print("agent-prompt fallo:", err)
             if "paused" in err: sb.insert("mensajes", {"de": "sistema", "para": "ivan", "contenido": f"⚠️ No puedo entregar «{t['titulo']}»: el Jefe está en pausa en Paperclip. Reactívalo (o dime \"activa al Jefe\") y la vuelvo a enviar sola.", "tipo": "sistema", "procesado": True})
 
+def avisos_revision(ids):
+    """Aviso cuando un agente deja una tarea lista para que Iván la revise."""
+    for i in q("select i.id,i.identifier,i.title,i.assignee_agent_id, (select body from issue_comments c where c.issue_id=i.id order by c.created_at desc limit 1) ult from issues i where i.status='in_review'"):
+        t = sb.get("tareas", f"paperclip_id=eq.{i['id']}&select=id,avisado_revision")
+        if not t or t[0].get("avisado_revision"): continue
+        ult = (i.get("ult") or "")[:500]
+        aviso("revisar", f"👀 {i['identifier']} lista para revisar: «{i['title']}»",
+              f"{ult}\n\nSi está bien, muévela a Terminada en el tablero. Si no, escríbele el fallo (en la tarea o aquí: \"{i['identifier']}: ...\").",
+              i["identifier"], ids.get(i["assignee_agent_id"]))
+        sb.patch("tareas", f"id=eq.{t[0]['id']}", {"avisado_revision": True})
+
 def avisos_terminadas(ids):
     for i in q("select id,identifier,title,status,assignee_agent_id from issues where status='done'"):
         t = sb.get("tareas", f"paperclip_id=eq.{i['id']}&select=id,avisado_listo")
@@ -219,7 +236,7 @@ def avisos_terminadas(ids):
         txt = (f"✅ Tarea {i['identifier']} terminada: «{i['title']}».\n"
                + ("Entregas recientes:\n" + "\n".join("• " + e for e in entregas[:8]) + "\n" if entregas else "")
                + f"\nRevísalo y respóndeme aquí con tu feedback empezando por \"{i['identifier']}:\" (qué está bien, qué corregir para la próxima). Lo convertiré en lección para el equipo.")
-        tg(txt)
+        aviso("terminada", f"✅ {i['identifier']} terminada: «{i['title']}»", txt.split("\n",1)[1] if "\n" in txt else "", i["identifier"], ids.get(i["assignee_agent_id"]))
         sb.patch("tareas", f"id=eq.{t[0]['id']}", {"avisado_listo": True})
         print("aviso terminada ->", i["identifier"])
 
@@ -354,7 +371,7 @@ def aprobaciones(ids):
     for r in rows:
         if r["estado"] == "pendiente" and r["id"] not in AVISADAS:
             AVISADAS.add(r["id"])
-            tg(f"🙋 {r['agente_id'] or 'Un agente'} necesita tu OK ({r['tarea'] or 'oficina'}):\n{r['pregunta'][:600]}\n\nApruébalo en la oficina (panel Pendiente de tu OK) o respóndeme: \"{r['tarea']} aprobado\" / \"{r['tarea']} rechazado: motivo\".")
+            aviso("ok", f"🙋 {r['agente_id'] or 'Un agente'} necesita tu OK ({r['tarea'] or 'oficina'})", f"{r['pregunta'][:600]}\n\nApruébalo en la oficina (panel Pendiente de tu OK) o respóndeme: \"{r['tarea']} aprobado\" / \"{r['tarea']} rechazado: motivo\".", r["tarea"], r["agente_id"])
     # 2) Supabase -> Paperclip (decisiones de Iván)
     for a in sb.get("aprobaciones", "procesada=eq.false&decision=not.is.null&select=*"):
         ok = False
@@ -494,7 +511,7 @@ def loop():
             aprobaciones(ids)
             mensajes_web_nuevos()
             cambio_modelo_pendiente()
-            avisos_terminadas(ids)
+            avisos_terminadas(ids); avisos_revision(ids)
             if n % 6 == 0: escuela()
         except Exception:
             traceback.print_exc()
