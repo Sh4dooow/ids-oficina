@@ -257,6 +257,71 @@ def cambio_modelo_pendiente():
     tg(f"🔧 Cambio aplicado: los 4 agentes ahora usan {modelo} (esfuerzo medio) y tienen tope de 15 €/mes cada uno.")
     print("modelo cambiado a", modelo)
 
+# ---------- EN VIVO: qué está haciendo cada agente (lee los logs de las vueltas, coste cero) ----------
+RUNLOGS = f"/home/oficina/.paperclip/instances/default/data/run-logs/{COMPANY}"
+VIVO = {}   # run_id -> {"off": bytes leídos, "buf": texto pendiente, "agente":..., "tarea":...}
+VIVO_FIN = set()
+
+def resumen_tool(name, inp):
+    inp = inp or {}
+    if name == "Bash": return "⌨️ " + (inp.get("description") or inp.get("command", ""))[:140]
+    if name in ("Read", "Write", "Edit", "MultiEdit"): return {"Read": "📖 Lee ", "Write": "📝 Escribe ", "Edit": "✏️ Edita ", "MultiEdit": "✏️ Edita "}[name] + os.path.basename(inp.get("file_path", ""))
+    if name in ("Glob", "Grep"): return "🔍 Busca " + (inp.get("pattern") or "")[:80]
+    if name == "Skill": return "🎓 Usa la skill " + (inp.get("skill") or inp.get("name") or "")
+    if name == "WebFetch": return "🌐 Consulta " + (inp.get("url") or "")[:80]
+    if name == "WebSearch": return "🌐 Busca en la web: " + (inp.get("query") or "")[:80]
+    if name == "Task" or name == "Agent": return "🤖 Delega: " + (inp.get("description") or "")[:100]
+    if name.startswith("mcp__"): return "🔌 " + name.replace("mcp__", "").replace("__", " › ")[:80]
+    return "🔧 " + name
+
+def en_vivo():
+    runs = q("select r.id, r.agent_id, r.status, r.log_ref, i.identifier from heartbeat_runs r left join issues i on i.id=r.issue_id where r.created_at > now() - interval '6 hours' order by r.created_at")
+    ids = {a["id"]: AGENTES.get(a["name"]) for a in q("select id,name from agents")}
+    filas = []
+    for r in runs:
+        slug = ids.get(r["agent_id"]);
+        if not slug or not r["log_ref"]: continue
+        st = VIVO.setdefault(r["id"], {"off": 0, "buf": "", "nuevo": True})
+        if st["nuevo"]:
+            st["nuevo"] = False
+            filas.append({"agente_id": slug, "run_id": r["id"], "tarea": r["identifier"], "tipo": "estado", "texto": f"▶️ Empieza a trabajar en {r['identifier'] or 'la oficina'}"})
+        path = os.path.join("/home/oficina/.paperclip/instances/default/data/run-logs", r["log_ref"])
+        try:
+            with open(path, "rb") as f:
+                f.seek(st["off"]); data = f.read(); st["off"] += len(data)
+        except FileNotFoundError: data = b""
+        for line in data.decode(errors="replace").splitlines():
+            try: ev = json.loads(line)
+            except Exception: continue
+            if ev.get("stream") != "stdout": continue
+            st["buf"] += ev.get("chunk", "")
+            while "\n" in st["buf"]:
+                raw, st["buf"] = st["buf"].split("\n", 1)
+                raw = raw.strip()
+                if not raw.startswith("{"): continue
+                try: m = json.loads(raw)
+                except Exception: continue
+                if m.get("type") == "assistant":
+                    for c in (m.get("message", {}).get("content") or []):
+                        if c.get("type") == "text" and c.get("text", "").strip():
+                            filas.append({"agente_id": slug, "run_id": r["id"], "tarea": r["identifier"], "tipo": "piensa", "texto": "💭 " + c["text"].strip()[:400]})
+                        elif c.get("type") == "tool_use":
+                            filas.append({"agente_id": slug, "run_id": r["id"], "tarea": r["identifier"], "tipo": "herramienta", "texto": resumen_tool(c.get("name", ""), c.get("input"))})
+                elif m.get("type") == "result":
+                    filas.append({"agente_id": slug, "run_id": r["id"], "tarea": r["identifier"], "tipo": "resultado", "texto": "🏁 " + (m.get("result") or "Vuelta terminada").strip()[:400]})
+        if r["status"] in ("succeeded", "failed", "cancelled") and r["id"] not in VIVO_FIN:
+            VIVO_FIN.add(r["id"])
+            txt = {"succeeded": "✅ Vuelta terminada", "failed": "⚠️ Vuelta fallida", "cancelled": "⏹ Vuelta cancelada"}[r["status"]]
+            filas.append({"agente_id": slug, "run_id": r["id"], "tarea": r["identifier"], "tipo": "estado", "texto": txt + (f" ({r['identifier']})" if r["identifier"] else "")})
+    if filas:
+        for i in range(0, len(filas), 50):
+            requests.post(f"{SB_URL}/rest/v1/en_vivo", headers=sb.h(), data=json.dumps(filas[i:i+50]), timeout=20)
+        # limpiar: dejar las 400 últimas
+        try:
+            viejas = sb.get("en_vivo", "select=id&order=creado_en.desc&offset=400&limit=200")
+            for v in viejas: requests.delete(f"{SB_URL}/rest/v1/en_vivo?id=eq.{v['id']}", headers=sb.h(), timeout=20)
+        except Exception: pass
+
 def mensajes_web_nuevos():
     for m in sb.get("mensajes", "procesado=eq.false&de=eq.ivan&para=eq.jefe&select=*"):
         args = ["agent-prompt", "Jefe", JEFE_KEY]
@@ -336,10 +401,16 @@ def escuela():
 
 def loop():
     n = 0
+    # al arrancar, no re-publicar vueltas antiguas
+    for r in q("select id, log_ref from heartbeat_runs where created_at > now() - interval '6 hours'"):
+        p = os.path.join("/home/oficina/.paperclip/instances/default/data/run-logs", r["log_ref"] or "")
+        VIVO[r["id"]] = {"off": os.path.getsize(p) if os.path.exists(p) else 0, "buf": "", "nuevo": False}
+        if r["id"]: VIVO_FIN.add(r["id"])
     while True:
         try:
             ids = {a["id"]: AGENTES.get(a["name"]) for a in q("select id,name from agents")}
             sync_agentes(ids)
+            en_vivo()
             sync_tareas(ids)
             tarea_ids = {t["paperclip_id"]: t["id"] for t in sb.get("tareas", "paperclip_id=not.is.null&select=id,paperclip_id")}
             sync_comentarios(ids, tarea_ids)
