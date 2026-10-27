@@ -82,6 +82,18 @@ export const TILES = {
     'EKKKKKKKKKKKKKKE', 'EKKKKKKKKKKKKKKE', 'EKKKKKKKKKKKKKKE', 'EKKKKKKKKKKKKKKE',
     'EKKKKKKKKKKKKKKE', 'EKKKKKKKKKKKKKKE', 'EKKKKKKKKKKKKKKE', 'EEEEEEEEEEEEEEEE',
   ],
+  alfombraAzul: [
+    'MMMMMMMMMMMMMMMM', 'MmmmmmmmmmmmmmmM', 'MmmmmmmmmmmmmmmM', 'MmmmmmmmMmmmmmmM',
+    'MmmmmmmmmmmmmmmM', 'MmmmMmmmmmmmmmmM', 'MmmmmmmmmmmmmmmM', 'MmmmmmmmmmmmMmmM',
+    'MmmmmmmmmmmmmmmM', 'MmmMmmmmmmmmmmmM', 'MmmmmmmmmmmmmmmM', 'MmmmmmmmmmMmmmmM',
+    'MmmmmmmmmmmmmmmM', 'MmmmmmmMmmmmmmmM', 'MmmmmmmmmmmmmmmM', 'MMMMMMMMMMMMMMMM',
+  ],
+  alfombraVerde: [
+    'PPPPPPPPPPPPPPPP', 'PppppppppppppppP', 'PppppppppppppppP', 'PppppppppPpppppP',
+    'PppppppppppppppP', 'PppppPpppppppppP', 'PppppppppppppppP', 'PpppppppppppPppP',
+    'PppppppppppppppP', 'PppPpppppppppppP', 'PppppppppppppppP', 'PppppppppppPpppP',
+    'PppppppppppppppP', 'PppppppPpppppppP', 'PppppppppppppppP', 'PPPPPPPPPPPPPPPP',
+  ],
   cristal: [ // mampara de cristal
     'KKKKKKKKKKKKKKKK', 'GuuuuuuuGuuuuuuG', 'GuuuuuuuGuuuuuuG', 'GuuuNuuuGuuuNuuG',
     'GuuuNuuuGuuuNuuG', 'GuuuuuuuGuuuuuuG', 'GuuuuuuuGuuuuuuG', 'GGGGGGGGGGGGGGGG',
@@ -311,6 +323,24 @@ export const PROPS = {
     '................................',
     '................................',
     '................................',
+  ],
+  impresora: [
+    '................', '................', '................', '....GGGGGGGG....',
+    '...GhhhhhhhhG...', '...GGGGGGGGGG...', '..GhhhhhhhhhhG..', '..GhKKKKKKKKhG..',
+    '..GhhhhhhhhhhG..', '..GGGGGGGGGGGG..', '..GhhhhhhhhhhG..', '..GGGGGGGGGGGG..',
+    '................', '................', '................', '................',
+  ],
+  archivador: [
+    '................', '....GGGGGGGG....', '...GhhhhhhhhG...', '...GhhhKKhhhG...',
+    '...GGGGGGGGGG...', '...GhhhhhhhhG...', '...GhhhKKhhhG...', '...GGGGGGGGGG...',
+    '...GhhhhhhhhG...', '...GhhhKKhhhG...', '...GGGGGGGGGG...', '...GhhhhhhhhG...',
+    '...GhhhKKhhhG...', '...GGGGGGGGGG...', '................', '................',
+  ],
+  mesita: [
+    '................', '................', '................', '................',
+    '....CCCCCCCC....', '...CccccccccC...', '...CccccccccC...', '...CbbbbbbbbC...',
+    '....B......B....', '....B......B....', '................', '................',
+    '................', '................', '................', '................',
   ],
   tele: [ // 32x16 pantalla grande sala Listo
     '.KKKKKKKKKKKKKKKKKKKKKKKKKKKKKK.',

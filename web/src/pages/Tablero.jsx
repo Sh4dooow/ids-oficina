@@ -26,13 +26,8 @@ export default function Tablero() {
 
   async function mover(id, estado) {
     const col = ESTADOS.find(e => e.id === estado)
-    const t = tareas.find(x => x.id === id)
-    await supabase.from('tareas').update({ estado, asignado_a: col.agente }).eq('id', id)
-    // Si la tarea vive en Paperclip, se lo pedimos al Jefe (el puente lo convierte en comentario)
-    if (t?.paperclip_id) {
-      const destino = col.agente ? `pásala a ${col.agente}` : 'dala por terminada (listo)'
-      await supabase.from('mensajes').insert({ de: 'ivan', para: 'jefe', tarea_id: id, contenido: `Iván ha movido esta tarea en el tablero: ${destino}.`, tipo: 'texto' })
-    }
+    // mover_a lo lee el puente del servidor y reasigna la tarea en Paperclip de verdad
+    await supabase.from('tareas').update({ estado, asignado_a: col.agente, mover_a: col.agente || 'listo' }).eq('id', id)
   }
 
   return (

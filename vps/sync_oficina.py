@@ -130,6 +130,8 @@ def sync_tareas(ids):
         if est is None: continue
         rows.append({"paperclip_id": i["id"], "paperclip_identifier": i["identifier"], "titulo": f"{i['identifier']} · {i['title']}",
                      "descripcion": (i["description"] or "")[:4000], "estado": est, "asignado_a": slug, "origen": "paperclip"})
+    pendientes = {t["paperclip_id"] for t in sb.get("tareas", "mover_a=not.is.null&select=paperclip_id")}
+    rows = [r for r in rows if r["paperclip_id"] not in pendientes]
     sb.upsert("tareas", rows, on="paperclip_id")
     # cancelados -> borrar del tablero
     canc = [i["id"] for i in issues if i["status"] in ("cancelled", "canceled")]
@@ -212,6 +214,27 @@ def avisos_terminadas(ids):
         tg(txt)
         sb.patch("tareas", f"id=eq.{t[0]['id']}", {"avisado_listo": True})
         print("aviso terminada ->", i["identifier"])
+
+def movimientos_web():
+    """Iván arrastra una tarjeta en el tablero -> reasignar en Paperclip."""
+    nombre_por_slug = {v: k for k, v in AGENTES.items()}
+    ids_by_name = {a["name"]: a["id"] for a in q("select id,name from agents")}
+    for t in sb.get("tareas", "mover_a=not.is.null&paperclip_id=not.is.null&select=id,paperclip_id,mover_a,paperclip_identifier"):
+        dest = t["mover_a"]
+        try:
+            if dest == "listo":
+                q("update issues set status='done', completed_at=now(), updated_at=now() where id=%s", t["paperclip_id"])
+            else:
+                aid = ids_by_name.get(nombre_por_slug.get(dest, ""))
+                if aid:
+                    q("update issues set assignee_agent_id=%s, status='todo', updated_at=now() where id=%s", aid, t["paperclip_id"])
+                    q("insert into issue_comments (id,company_id,issue_id,author_user_id,body,created_at,updated_at,author_type) values (gen_random_uuid(),%s,%s,%s,%s,now(),now(),'user')",
+                      COMPANY, t["paperclip_id"], ENV.get("PAPERCLIP_USER_ID", "ZDEFzCdEaUcenwUClaDjR8rFxqC4JOSN"), f"Iván ha movido esta tarea en el tablero a {nombre_por_slug.get(dest, dest)}.")
+                    cli("agent", "wake", nombre_por_slug.get(dest, dest), "-C", COMPANY)
+            print("movida", t.get("paperclip_identifier"), "->", dest)
+        except Exception as e:
+            print("mover fallo:", e)
+        sb.patch("tareas", f"id=eq.{t['id']}", {"mover_a": None})
 
 def mensajes_web_nuevos():
     for m in sb.get("mensajes", "procesado=eq.false&de=eq.ivan&para=eq.jefe&select=*"):
@@ -301,6 +324,7 @@ def loop():
             sync_comentarios(ids, tarea_ids)
             sync_actividad(ids, tarea_ids)
             tareas_web_nuevas()
+            movimientos_web()
             mensajes_web_nuevos()
             avisos_terminadas(ids)
             if n % 6 == 0: escuela()
