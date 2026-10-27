@@ -10,6 +10,7 @@ export default function Avisos() {
   const [editando, setEditando] = useState(null)
   const [textos, setTextos] = useState({})
   const [leccion, setLeccion] = useState({})
+  const [hechos, setHechos] = useState({})
   const noLeidos = avisos.filter(a => !a.leido).length
 
   useEffect(() => {
@@ -37,13 +38,13 @@ export default function Avisos() {
   async function terminar(a) {
     const id = await tareaDe(a.tarea_identifier); if (!id) return alert('No encuentro la tarea ' + a.tarea_identifier)
     await supabase.from('tareas').update({ mover_a: 'listo' }).eq('id', id)
-    await marcar(a.id); setEditando(null)
+    await marcar(a.id); setEditando(null); setHechos(h => ({ ...h, [a.id]: 'terminada' }))
   }
   async function corregir(a) {
     const txt = (textos[a.id] || '').trim(); if (!txt) return
     const id = await tareaDe(a.tarea_identifier); if (!id) return alert('No encuentro la tarea ' + a.tarea_identifier)
     await supabase.from('tareas').update({ correccion: txt, correccion_leccion: leccion[a.id] !== false }).eq('id', id)
-    await marcar(a.id); setEditando(null); setTextos(t => ({ ...t, [a.id]: '' }))
+    await marcar(a.id); setEditando(null); setTextos(t => ({ ...t, [a.id]: '' })); setHechos(h => ({ ...h, [a.id]: 'corregida' }))
   }
 
   return (
@@ -59,12 +60,13 @@ export default function Avisos() {
           </div>
           {avisos.length === 0 && <div className="muted">Nada pendiente. Cuando un agente termine algo o necesite tu OK, saldrá aquí.</div>}
           {avisos.map(a => (
-            <div key={a.id} className={'aviso-item ' + (a.leido ? 'leido' : '')} onClick={() => !a.leido && marcar(a.id)}>
+            <div key={a.id} className={'aviso-item ' + (a.leido ? 'leido' : '')} onClick={() => !a.leido && a.tipo !== 'revisar' && marcar(a.id)}>
               <div className="fila"><span>{ICONO[a.tipo] || 'ℹ️'}</span><b>{a.titulo}</b><span className="espacio" />
                 <span className="muted">{new Date(a.creado_en).toLocaleString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span></div>
               {a.texto && <div className="muted pre">{a.texto}</div>}
               {a.tarea_identifier && <a className="link" href={`https://oficina-49-12-251-2.sslip.io/IVA/issues/${a.tarea_identifier}`} target="_blank" rel="noreferrer">abrir {a.tarea_identifier} ↗</a>}
-              {a.tipo === 'revisar' && !a.leido && (
+              {hechos[a.id] && <div className="muted">{hechos[a.id] === 'terminada' ? '✅ Enviado: tarea terminada' : '📨 Corrección enviada al agente'}</div>}
+              {a.tipo === 'revisar' && !hechos[a.id] && (
                 <div className="aviso-acciones" onClick={e => e.stopPropagation()}>
                   {editando !== a.id ? (
                     <div className="fila">
