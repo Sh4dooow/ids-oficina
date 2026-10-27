@@ -366,8 +366,17 @@ def aprobaciones(ids):
                     if a["decision"] == "si": cmd = ["issue", "interaction:accept", a["issue_id"], a["id"], "--json"]
                     else: cmd = ["issue", "interaction:reject", a["issue_id"], a["id"], "--reason", a.get("nota") or "Rechazado por Iván", "--json"]
                 else:
-                    qid = (q("select payload from issue_thread_interactions where id=%s", a["id"])[0]["payload"].get("questions") or [{}])[0].get("id")
-                    cmd = ["issue", "interaction:respond", a["issue_id"], a["id"], "--answers-json", json.dumps([{"questionId": qid, "optionIds": [a["decision"]] if a["decision"] not in ("si", "no", "texto") else [], "freeText": a.get("nota") or ""}]), "--json"]
+                    preg = (q("select payload from issue_thread_interactions where id=%s", a["id"])[0]["payload"].get("questions") or [{}])[0]
+                    qid, opts = preg.get("id"), preg.get("options") or []
+                    nota = a.get("nota") or ""
+                    if a["decision"] not in ("si", "no", "texto"): sel = [a["decision"]]
+                    elif opts and preg.get("required", True):
+                        # texto libre en pregunta obligatoria: elegir la opción que más se parece a la nota (o la primera)
+                        pal = set(re.findall(r"\w{4,}", nota.lower()))
+                        mejor = max(opts, key=lambda o: len(pal & set(re.findall(r"\w{4,}", (o.get("label") or "").lower()))))
+                        sel = [mejor["id"]]
+                    else: sel = []
+                    cmd = ["issue", "interaction:respond", a["issue_id"], a["id"], "--answers-json", json.dumps([{"questionId": qid, "optionIds": sel, "freeText": nota}]), "--json"]
                 r = cli(*cmd); ok = r.returncode == 0
                 if not ok: print("interaccion fallo:", r.stderr[-300:], r.stdout[-200:])
                 if a.get("nota"):
