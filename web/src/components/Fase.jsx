@@ -12,12 +12,13 @@ export const FASES = [
 export const TE_TOCA = ['esperando_ok', 'para_revisar']
 
 export function BarraFase({ fase }) {
-  const idx = Math.max(0, FASES.findIndex(f => f.id === fase))
+  const parada = fase === 'parada'
+  const idx = Math.max(0, FASES.findIndex(f => f.id === (parada ? 'en_marcha' : fase)))
   return (
-    <div className="barra-fase" title={FASES[idx].nombre}>
+    <div className="barra-fase" title={parada ? 'Nadie la está trabajando ahora mismo; se reactiva sola' : FASES[idx].nombre}>
       {FASES.map((f, i) => (
-        <span key={f.id} className={'paso ' + (i < idx ? 'hecho' : i === idx ? 'actual' : '')}>
-          <i>{f.icono}</i><small>{f.nombre}</small>
+        <span key={f.id} className={'paso ' + (i < idx ? 'hecho' : i === idx ? (parada ? 'parada' : 'actual') : '')}>
+          <i>{i === idx && parada ? '⏸' : f.icono}</i><small>{i === idx && parada ? 'Parada' : f.nombre}</small>
         </span>
       ))}
     </div>

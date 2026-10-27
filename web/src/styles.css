@@ -172,3 +172,4 @@ main { padding: 12px 16px; }
 .te-toca-item { border-left:3px solid #f5a524; }
 .tarjeta.destacada { border:1px solid #f5a524; }
 .muted.pre { white-space:pre-wrap; }
+.barra-fase .paso.parada { opacity:1; background:#c0392b; color:#fff; font-weight:700; }

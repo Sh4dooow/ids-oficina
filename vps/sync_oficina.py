@@ -47,6 +47,9 @@ class SB:
     def patch(s, table, q, data):
         r = requests.patch(f"{SB_URL}/rest/v1/{table}?{q}", headers=s.h(), data=json.dumps(data), timeout=20)
         if r.status_code >= 300: print("patch", table, r.status_code, r.text[:300])
+    def delete(s, table, q):
+        r = requests.delete(f"{SB_URL}/rest/v1/{table}?{q}", headers=s.h(), timeout=20)
+        if r.status_code >= 300: print("delete", table, r.status_code, r.text[:300])
     def insert(s, table, row):
         r = requests.post(f"{SB_URL}/rest/v1/{table}", headers=s.h(), data=json.dumps(row), timeout=20)
         if r.status_code >= 300: print("insert", table, r.status_code, r.text[:300]); return None
@@ -113,6 +116,12 @@ def mapa_estado(issue, slug):
     if st in ("cancelled", "canceled"): return None
     return COLUMNA.get(slug or "jefe", "pendiente")
 
+def despertar(agente, issue_id=None, identifier=None, motivo=""):
+    """Despierta a un agente CON la tarea en el contexto (un wake pelado llega 'vacío' y el agente no hace nada)."""
+    args = ["agent", "wake", agente, "-C", COMPANY, "--trigger", "system", "--reason", motivo or f"Tarea {identifier or ''}"]
+    if issue_id: args += ["--source", "assignment", "--payload", json.dumps({"issueId": issue_id, "issueIdentifier": identifier})]
+    return cli(*args)
+
 def cli(*args):
     env = dict(os.environ, PATH="/home/oficina/.local/bin:/home/oficina/.npm-global/bin:" + os.environ.get("PATH", ""))
     return subprocess.run(["sudo", "-u", "oficina", "-H", "env", f"PATH={env['PATH']}", "paperclipai", *args],
@@ -128,23 +137,48 @@ def sync_agentes(ids):
         rows.append({"id": slug, "estado": est})
     for r in rows: sb.patch("agentes", f"id=eq.{r['id']}", {"estado": r["estado"]})
 
+def cerrar_padres():
+    """Una tarea 'madre' (la petición original de Iván) se cierra sola cuando todas sus subtareas están terminadas/canceladas."""
+    for i in q("""select p.id, p.identifier from issues p where p.status not in ('done','cancelled')
+                  and exists (select 1 from issues c where c.parent_id=p.id)
+                  and not exists (select 1 from issues c where c.parent_id=p.id and c.status not in ('done','cancelled'))
+                  and exists (select 1 from issues c where c.parent_id=p.id and c.status='done')"""):
+        q("update issues set status='done', completed_at=now(), updated_at=now() where id=%s", i["id"])
+        print("madre cerrada", i["identifier"])
+
 def sync_tareas(ids):
+    cerrar_padres()
+    hijos_de = {r["id"]: r["n"] for r in q("select p.id, count(c.id) n from issues p join issues c on c.parent_id=p.id group by p.id")}
     issues = q("select id,identifier,title,description,status,assignee_agent_id,created_at,updated_at, (select body from issue_comments c where c.issue_id=issues.id order by c.created_at desc limit 1) ult from issues order by created_at")
     con_ok = {r["issue_id"] for r in q("select issue_id from issue_thread_interactions where status='pending'")}
+    en_curso = {r["issue_id"] for r in q("select issue_id from heartbeat_runs where status in ('running','queued') and issue_id is not null")}
+    en_curso |= {r["id"] for r in q("select i.id from issues i join agents a on a.id=i.assignee_agent_id where a.status='running' and i.status='in_progress'")}
     ult_agente = {r["issue_id"]: r["author_agent_id"] for r in q("select distinct on (issue_id) issue_id, author_agent_id from issue_comments where author_agent_id is not null order by issue_id, created_at desc")}
     rows = []
     for i in issues:
         slug = ids.get(i["assignee_agent_id"]) or (ids.get(ult_agente.get(i["id"])) if i["status"] in ("in_review", "done") else None)
         est = mapa_estado(i, slug)
         if est is None: continue
+        if hijos_de.get(i["id"]) and i["status"] != "done": continue  # petición madre repartida en subtareas: se ven las hijas
         st = i["status"]
-        fase = "terminada" if st == "done" else "para_revisar" if st == "in_review" else "esperando_ok" if i["id"] in con_ok else "en_marcha" if st == "in_progress" else "pedida"
+        fase = "terminada" if st == "done" else "para_revisar" if st == "in_review" else "esperando_ok" if i["id"] in con_ok else ("en_marcha" if i["id"] in en_curso else "parada") if st == "in_progress" else "pedida"
+        if fase == "parada" and slug and i["assignee_agent_id"]:
+            # nadie la está trabajando: despertar al asignado (como mucho una vez cada 10 min por tarea)
+            ult = REACTIVADAS.get(i["id"], 0)
+            if time.time() - ult > 600:
+                REACTIVADAS[i["id"]] = time.time()
+                despertar({"jefe": "Jefe", "tiendas": "Tiendas", "creador": "Creador", "editor": "Editor"}[slug], i["id"], i["identifier"], "Tarea en curso sin nadie trabajando: retomar")
+                fase = "en_marcha"
         rows.append({"paperclip_id": i["id"], "paperclip_identifier": i["identifier"], "titulo": f"{i['identifier']} · {i['title']}",
                      "descripcion": (i["description"] or "")[:4000], "estado": est, "asignado_a": slug, "origen": "paperclip",
                      "fase": fase, "ultimo_mensaje": (i.get("ult") or "")[:400]})
     pendientes = {t["paperclip_id"] for t in sb.get("tareas", "mover_a=not.is.null&select=paperclip_id")}
     rows = [r for r in rows if r["paperclip_id"] not in pendientes]
     sb.upsert("tareas", rows, on="paperclip_id")
+    # quitar del tablero las canceladas y las madres repartidas (ya no existen como tarjeta)
+    vivas = {r["paperclip_id"] for r in rows} | pendientes
+    for t in sb.get("tareas", "paperclip_id=not.is.null&select=id,paperclip_id"):
+        if t["paperclip_id"] not in vivas: sb.delete("tareas", f"id=eq.{t['id']}")
     # cancelados -> borrar del tablero
     canc = [i["id"] for i in issues if i["status"] in ("cancelled", "canceled")]
     for cid in canc: requests.delete(f"{SB_URL}/rest/v1/tareas?paperclip_id=eq.{cid}", headers=sb.h(), timeout=20)
@@ -287,7 +321,7 @@ def movimientos_web():
                     q("update issues set assignee_agent_id=%s, status='todo', updated_at=now() where id=%s", aid, t["paperclip_id"])
                     q("insert into issue_comments (id,company_id,issue_id,author_user_id,body,created_at,updated_at,author_type) values (gen_random_uuid(),%s,%s,%s,%s,now(),now(),'user')",
                       COMPANY, t["paperclip_id"], ENV.get("PAPERCLIP_USER_ID", "ZDEFzCdEaUcenwUClaDjR8rFxqC4JOSN"), f"Iván ha movido esta tarea en el tablero a {nombre_por_slug.get(dest, dest)}.")
-                    cli("agent", "wake", nombre_por_slug.get(dest, dest), "-C", COMPANY)
+                    despertar(nombre_por_slug.get(dest, dest), t["paperclip_id"], t.get("paperclip_identifier"), "Iván la movió en el tablero")
             print("movida", t.get("paperclip_identifier"), "->", dest)
         except Exception as e:
             print("mover fallo:", e)
@@ -308,7 +342,7 @@ def correcciones_web():
               COMPANY, t["paperclip_id"], ENV.get("PAPERCLIP_USER_ID", "ZDEFzCdEaUcenwUClaDjR8rFxqC4JOSN"),
               f"Iván ha revisado la entrega y NO le vale. Corrección:\n{t['correccion']}\n\nCorrígelo (pide OK antes de gastar créditos) y vuelve a dejarla en revisión.")
             q("update issues set status='in_progress', assignee_agent_id=coalesce(%s, assignee_agent_id), assignee_user_id=null, updated_at=now() where id=%s", aid, t["paperclip_id"])
-            if agente: cli("agent", "wake", agente, "-C", COMPANY)
+            if agente: despertar(agente, t["paperclip_id"], t.get("paperclip_identifier"), "Corrección de Iván")
             if t.get("correccion_leccion") and t.get("asignado_a"):
                 sb.insert("lecciones", {"agente_id": t["asignado_a"], "titulo": ("Corrección " + (t.get("paperclip_identifier") or "") + ": " + t["correccion"][:90]).strip(), "contenido": t["correccion"], "tipo": "correccion", "orden": 999})
             sb.patch("tareas", f"id=eq.{t['id']}", {"avisado_revision": False})
@@ -396,6 +430,7 @@ def en_vivo():
 
 # ---------- APROBACIONES: preguntas/confirmaciones de los agentes -> panel de Iván ----------
 AVISADAS = set()
+REACTIVADAS = {}
 def aprobaciones(ids):
     # 1) Paperclip -> Supabase
     rows = []
@@ -464,7 +499,7 @@ def aprobaciones(ids):
         if ok:
             print("decision aplicada", a["tarea"], a["decision"])
             # AHORRO: las interacciones ya despiertan al asignado (wake_assignee); solo despertar a mano en aprobaciones de gasto
-            if a.get("agente_id") and a["fuente"] != "interaccion": cli("agent", "wake", {"jefe": "Jefe", "tiendas": "Tiendas", "creador": "Creador", "editor": "Editor"}[a["agente_id"]], "-C", COMPANY)
+            if a.get("agente_id") and a["fuente"] != "interaccion": despertar({"jefe": "Jefe", "tiendas": "Tiendas", "creador": "Creador", "editor": "Editor"}[a["agente_id"]], a.get("issue_id"), a.get("tarea"), "Decisión de Iván")
 
 def i_es_onboarding(texto): return "What would you like to do" in texto
 
