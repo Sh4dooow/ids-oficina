@@ -6,6 +6,16 @@ export default function Aprobaciones({ compacto = false }) {
   const [items, setItems] = useState([])
   const [nota, setNota] = useState({})
   const [verTodas, setVerTodas] = useState(false)
+  const [instr, setInstr] = useState({})
+  const [enviado, setEnviado] = useState({})
+
+  async function enviarInstrucciones(a) {
+    const texto = (instr[a.id] || '').trim(); if (!texto) return
+    const { data: t } = await supabase.from('tareas').select('id').eq('paperclip_id', a.issue_id).maybeSingle()
+    await supabase.from('mensajes').insert({ de: 'ivan', para: 'jefe', tarea_id: t?.id || null, tipo: 'texto',
+      contenido: `Sobre ${a.tarea || 'la tarea'} (${a.estado === 'rechazada' ? 'RECHAZADA' : a.estado}): ${texto}` })
+    setEnviado({ ...enviado, [a.id]: true }); setInstr({ ...instr, [a.id]: '' })
+  }
 
   useEffect(() => {
     cargar()
@@ -45,6 +55,12 @@ export default function Aprobaciones({ compacto = false }) {
             {a.decision && !a.procesada && <span className="chip">aplicando…</span>}
           </div>
           <p style={{ whiteSpace: 'pre-wrap', margin: '6px 0' }}>{a.pregunta}</p>
+          {(a.estado !== 'pendiente' || a.decision) && (
+            <div className="instrucciones">
+              <textarea rows={2} placeholder={a.estado === 'rechazada' ? 'Dile cómo quieres que lo rehaga (ej: solo 3 clips, gancho con el cartón, sin la toma del vaso…)' : 'Instrucciones o comentario para el agente'} value={instr[a.id] || ''} onChange={e => setInstr({ ...instr, [a.id]: e.target.value })} />
+              <div className="fila"><button onClick={() => enviarInstrucciones(a)}>📨 Enviar al agente</button>{enviado[a.id] && <span className="muted">Enviado. El Jefe se lo pasa y lo rehacen.</span>}</div>
+            </div>
+          )}
           {a.estado === 'pendiente' && !a.decision && (
             <>
               <input placeholder="Nota opcional para el agente (ej: cambia el gancho, baja a 5 clips…)" value={nota[a.id] || ''} onChange={e => setNota({ ...nota, [a.id]: e.target.value })} />
