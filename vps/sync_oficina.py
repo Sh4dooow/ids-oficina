@@ -377,7 +377,7 @@ def escuela():
         # skills que ya no están en la Escuela (y que la Escuela gestiona) se retiran
         if skills:
             for e in os.listdir(sdir):
-                if e not in deseadas:
+                if e not in deseadas and not e.startswith('higgsfield-'):
                     pth = os.path.join(sdir, e)
                     if os.path.islink(pth): os.unlink(pth)
                     elif os.path.isdir(pth): shutil.rmtree(pth)
