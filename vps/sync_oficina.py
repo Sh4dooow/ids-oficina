@@ -363,17 +363,19 @@ def aprobaciones(ids):
                 it = q("select kind from issue_thread_interactions where id=%s", a["id"])
                 kind = it[0]["kind"] if it else "request_confirmation"
                 if kind == "request_confirmation":
-                    if a["decision"] == "si": cmd = ["issue", "interaction:accept", a["issue_id"], a["id"], "-C", COMPANY, "--json"]
-                    else: cmd = ["issue", "interaction:reject", a["issue_id"], a["id"], "-C", COMPANY, "--reason", a.get("nota") or "Rechazado por Iván", "--json"]
+                    if a["decision"] == "si": cmd = ["issue", "interaction:accept", a["issue_id"], a["id"], "--json"]
+                    else: cmd = ["issue", "interaction:reject", a["issue_id"], a["id"], "--reason", a.get("nota") or "Rechazado por Iván", "--json"]
                 else:
                     qid = (q("select payload from issue_thread_interactions where id=%s", a["id"])[0]["payload"].get("questions") or [{}])[0].get("id")
-                    cmd = ["issue", "interaction:respond", a["issue_id"], a["id"], "-C", COMPANY, "--answers-json", json.dumps([{"questionId": qid, "selectedOptionIds": [a["decision"]] if a["decision"] not in ("si", "no") else [], "freeText": a.get("nota") or ""}]), "--json"]
+                    cmd = ["issue", "interaction:respond", a["issue_id"], a["id"], "--answers-json", json.dumps([{"questionId": qid, "selectedOptionIds": [a["decision"]] if a["decision"] not in ("si", "no") else [], "freeText": a.get("nota") or ""}]), "--json"]
                 r = cli(*cmd); ok = r.returncode == 0
                 if not ok: print("interaccion fallo:", r.stderr[-300:], r.stdout[-200:])
                 if a.get("nota"):
-                    cli("issue", "comment", a["issue_id"], "-C", COMPANY, "--body", f"Iván: {a['nota']}", "--json")
+                    cli("issue", "comment", a["issue_id"], "--body", f"Iván: {a['nota']}", "--json")
             else:
-                r = cli("approval", "approve" if a["decision"] == "si" else "reject", a["id"], "-C", COMPANY, "--json"); ok = r.returncode == 0
+                r = cli("approval", "approve" if a["decision"] == "si" else "reject", a["id"], "--json"); ok = r.returncode == 0
+                if not ok and "unknown option" not in (r.stderr or ""):
+                    r = cli("approval", "approve" if a["decision"] == "si" else "reject", a["id"], "-C", COMPANY, "--json"); ok = r.returncode == 0
                 if not ok: print("approval fallo:", r.stderr[-300:])
         except Exception as e: print("aprobacion fallo:", e)
         sb.patch("aprobaciones", f"id=eq.{a['id']}", {"procesada": True, "estado": ("aprobada" if a["decision"] == "si" else "rechazada") if ok else "pendiente", "decision": a["decision"] if ok else None})
