@@ -157,8 +157,11 @@ def sync_actividad(ids, tarea_ids):
     sb.upsert("actividad", rows, on="paperclip_id")
 
 # ---------- Supabase -> Paperclip ----------
+ULTIMO_INTENTO = {}
 def tareas_web_nuevas():
     for t in sb.get("tareas", "paperclip_id=is.null&origen=eq.web&select=*"):
+        if time.time() - ULTIMO_INTENTO.get(t["id"], 0) < 120: continue
+        ULTIMO_INTENTO[t["id"]] = time.time()
         desc = (t.get("descripcion") or "")
         carpeta = carpeta_producto(t); os.makedirs(carpeta, exist_ok=True)
         for sub in ("fotos", "referencias", "clips", "final"): os.makedirs(os.path.join(carpeta, sub), exist_ok=True)
@@ -175,7 +178,9 @@ def tareas_web_nuevas():
         if t.get("referencia_url"):
             desc += f"\n\n## Vídeo de referencia\nURL: {t['referencia_url']}"
             try:
-                f = descargar_referencia(t["referencia_url"], os.path.join(carpeta, "referencias"))
+                refdir = os.path.join(carpeta, "referencias")
+                ya = [os.path.join(refdir, f) for f in os.listdir(refdir)] if os.path.isdir(refdir) else []
+                f = ya[0] if ya else descargar_referencia(t["referencia_url"], refdir)
                 desc += f"\nDescargado en: {f}" if f else "\n(no se pudo descargar; usar la URL)"
             except Exception as e: desc += f"\n(descarga fallida: {e})"
         # --- fotos ---
@@ -195,7 +200,10 @@ def tareas_web_nuevas():
             sb.patch("tareas", f"id=eq.{t['id']}", {"paperclip_id": i["id"], "paperclip_identifier": i.get("identifier"), "origen": "paperclip",
                                                       "titulo": f"{i.get('identifier')} · {t['titulo']}"})
             print("tarea web ->", i.get("identifier"))
-        except Exception: print("agent-prompt fallo:", r.stdout[-300:], r.stderr[-300:])
+        except Exception:
+            err = (r.stderr or r.stdout)[-300:]
+            print("agent-prompt fallo:", err)
+            if "paused" in err: sb.insert("mensajes", {"de": "sistema", "para": "ivan", "contenido": f"⚠️ No puedo entregar «{t['titulo']}»: el Jefe está en pausa en Paperclip. Reactívalo (o dime \"activa al Jefe\") y la vuelvo a enviar sola.", "tipo": "sistema", "procesado": True})
 
 def avisos_terminadas(ids):
     for i in q("select id,identifier,title,status,assignee_agent_id from issues where status='done'"):
