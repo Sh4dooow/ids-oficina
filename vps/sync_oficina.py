@@ -374,15 +374,19 @@ def comentarios_sin_dueno():
     """Si Iván (o el Jefe por Telegram) comenta en una tarea que está en revisión y sin agente, es una corrección:
     devolvérsela al agente que la entregó y despertarlo. Si no, el comentario se queda ahí y nadie hace nada."""
     ids_name = {a["id"]: a["name"] for a in q("select id,name from agents")}
-    for i in q("""select i.id, i.identifier, i.title,
+    for i in q("""select i.id, i.identifier, i.title, i.completed_at,
                     (select author_type from issue_comments c where c.issue_id=i.id order by created_at desc limit 1) ult_tipo,
                     (select created_at from issue_comments c where c.issue_id=i.id order by created_at desc limit 1) ult_fecha,
                     (select author_agent_id from issue_comments c where c.issue_id=i.id and author_agent_id is not null order by created_at desc limit 1) ult_agente
-               from issues i where i.status='in_review' and i.assignee_agent_id is null"""):
+               from issues i where (i.status='in_review' and i.assignee_agent_id is null)
+                  or (i.status in ('done','todo','backlog') and i.assignee_agent_id is null and i.updated_at > now() - interval '7 days')"""):
         if i["ult_tipo"] != "user" or not i["ult_agente"]: continue
+        if i["ult_fecha"] and i.get("completed_at") and i["ult_fecha"] <= i["completed_at"]: continue
         if REASIGNADAS.get(i["id"]) == str(i["ult_fecha"]): continue
         REASIGNADAS[i["id"]] = str(i["ult_fecha"])
-        q("update issues set status='in_progress', assignee_agent_id=%s, assignee_user_id=null, updated_at=now() where id=%s", i["ult_agente"], i["id"])
+        q("update issues set status='in_progress', completed_at=null, assignee_agent_id=%s, assignee_user_id=null, updated_at=now() where id=%s", i["ult_agente"], i["id"])
+        t = sb.get("tareas", f"paperclip_id=eq.{i['id']}&select=id")
+        if t: sb.patch("tareas", f"id=eq.{t[0]['id']}", {"avisado_listo": False, "avisado_revision": False})
         despertar(ids_name[i["ult_agente"]], i["id"], i["identifier"], "Iván ha pedido un cambio sobre la entrega")
         print("comentario sin dueño ->", i["identifier"], "devuelta a", ids_name[i["ult_agente"]])
 
