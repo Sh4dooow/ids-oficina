@@ -276,11 +276,12 @@ def archivar_entrega(issue):
     coms = q("select body from issue_comments where issue_id=%s order by created_at desc limit 12", issue["id"])
     marca = marca_de(cuerpo + "\n" + "\n".join(c["body"] or "" for c in coms)) or "varios"
     rutas = []
-    for c in coms:
+    for c in coms:  # del comentario más reciente hacia atrás: el primero que nombre un vídeo es la entrega buena
         for m in re.findall(r"[\w./\-]*_entrantes/[^\s`'\")\]]+\.(?:mp4|mov)", c["body"] or ""):
             m = m[m.index("_entrantes/"):]
             p = os.path.join(OFICINA, m)
             if os.path.isfile(p) and p not in rutas: rutas.append(p)
+        if rutas: break
     if not rutas: return marca, []
     destino = os.path.join(OFICINA, marca, "videos"); os.makedirs(destino, exist_ok=True)
     nums = [int(x) for f in os.listdir(destino) for x in re.findall(rf"^{re.escape(marca)} video (\d+)", f)]
