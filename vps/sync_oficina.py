@@ -222,23 +222,49 @@ def avisos_revision(ids):
               i["identifier"], ids.get(i["assignee_agent_id"]))
         sb.patch("tareas", f"id=eq.{t[0]['id']}", {"avisado_revision": True})
 
+def marca_de(texto):
+    """Marca = carpeta de OFICINA (Starmist, sudaderas, ...) que aparezca en el texto de la tarea."""
+    t = (texto or "").lower()
+    for d in sorted(os.listdir(OFICINA), key=len, reverse=True):
+        if d.startswith("_") or d.startswith(".") or not os.path.isdir(os.path.join(OFICINA, d)): continue
+        if d.lower() in t: return d
+    return None
+
+def archivar_entrega(issue):
+    """Al terminar: copia el vídeo entregado a <Marca>/videos/<Marca> video NNN.mp4 y renombra la tarea."""
+    cuerpo = issue["title"] + "\n" + (issue["description"] or "")
+    coms = q("select body from issue_comments where issue_id=%s order by created_at desc limit 12", issue["id"])
+    marca = marca_de(cuerpo + "\n" + "\n".join(c["body"] or "" for c in coms)) or "varios"
+    rutas = []
+    for c in coms:
+        for m in re.findall(r"[\w./\-]*_entrantes/[^\s`'\")\]]+\.(?:mp4|mov)", c["body"] or ""):
+            m = m[m.index("_entrantes/"):]
+            p = os.path.join(OFICINA, m)
+            if os.path.isfile(p) and p not in rutas: rutas.append(p)
+    if not rutas: return marca, []
+    destino = os.path.join(OFICINA, marca, "videos"); os.makedirs(destino, exist_ok=True)
+    nums = [int(x) for f in os.listdir(destino) for x in re.findall(rf"^{re.escape(marca)} video (\d+)", f)]
+    n = max(nums, default=0) + 1
+    nombres = []
+    for i, src in enumerate(rutas[:5]):
+        nombre = f"{marca} video {n:03d}" + (f" ({i+1})" if len(rutas) > 1 else "") + os.path.splitext(src)[1]
+        shutil.copy2(src, os.path.join(destino, nombre)); nombres.append(f"{marca}/videos/{nombre}")
+    titulo = f"{marca} video {n:03d}"
+    cli("issue", "update", issue["id"], "--title", titulo)
+    t = sb.get("tareas", f"paperclip_id=eq.{issue['id']}&select=id")
+    if t: sb.patch("tareas", f"id=eq.{t[0]['id']}", {"titulo": f"{issue['identifier']} · {titulo}"})
+    return marca, nombres
+
 def avisos_terminadas(ids):
-    for i in q("select id,identifier,title,status,assignee_agent_id from issues where status='done'"):
+    for i in q("select id,identifier,title,description,status,assignee_agent_id from issues where status='done'"):
         t = sb.get("tareas", f"paperclip_id=eq.{i['id']}&select=id,avisado_listo")
         if not t or t[0].get("avisado_listo"): continue
-        # buscar entregas en final/
-        entregas = []
-        for root, _, files in os.walk(os.path.join(OFICINA, "productos")):
-            if root.endswith("/final"):
-                for f in files:
-                    p = os.path.join(root, f)
-                    if time.time() - os.path.getmtime(p) < 6 * 3600: entregas.append(p.replace(OFICINA + "/", ""))
-        txt = (f"✅ Tarea {i['identifier']} terminada: «{i['title']}».\n"
-               + ("Entregas recientes:\n" + "\n".join("• " + e for e in entregas[:8]) + "\n" if entregas else "")
-               + f"\nRevísalo y respóndeme aquí con tu feedback empezando por \"{i['identifier']}:\" (qué está bien, qué corregir para la próxima). Lo convertiré en lección para el equipo.")
-        aviso("terminada", f"✅ {i['identifier']} terminada: «{i['title']}»", txt.split("\n",1)[1] if "\n" in txt else "", i["identifier"], ids.get(i["assignee_agent_id"]))
+        try: marca, entregas = archivar_entrega(i)
+        except Exception as e: print("archivar:", e); marca, entregas = None, []
+        txt = (("Guardado en tu Drive:\n" + "\n".join("• " + e for e in entregas) + "\n") if entregas else "No encontré ningún vídeo entregado en el hilo de la tarea.\n") \
+              + f"\nSi quieres que aprendan algo de este vídeo, respóndeme empezando por \"{i['identifier']}:\" y lo convierto en lección para el equipo."
+        aviso("terminada", f"✅ {i['identifier']} terminada" + (f" → {entregas[0].split('/')[-1].rsplit('.',1)[0]}" if entregas else f": «{i['title']}»"), txt, i["identifier"], ids.get(i["assignee_agent_id"]))
         sb.patch("tareas", f"id=eq.{t[0]['id']}", {"avisado_listo": True})
-        print("aviso terminada ->", i["identifier"])
 
 def movimientos_web():
     """Iván arrastra una tarjeta en el tablero -> reasignar en Paperclip."""
