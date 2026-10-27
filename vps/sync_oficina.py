@@ -84,10 +84,14 @@ def descargar_referencia(url, carpeta):
     return out[-1] if out else None
 
 def carpeta_producto(t):
+    """La carpeta del producto es su carpeta en el Drive de Iván (OFICINA/<carpeta_drive>)."""
     if t.get("producto_id"):
-        p = sb.get("productos", f"id=eq.{t['producto_id']}&select=slug")
-        if p: return os.path.join(OFICINA, "productos", p[0]["slug"])
-    return os.path.join(OFICINA, "productos", "_entrantes", t["id"][:8])
+        p = sb.get("productos", f"id=eq.{t['producto_id']}&select=slug,carpeta_drive,nombre")
+        if p:
+            c = (p[0].get("carpeta_drive") or "").strip()
+            if c and not c.startswith("http"): return os.path.join(OFICINA, c)
+            return os.path.join(OFICINA, p[0]["slug"])
+    return os.path.join(OFICINA, "_entrantes", t["id"][:8])
 
 def q(sql, *a):
     with pg.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as c:
