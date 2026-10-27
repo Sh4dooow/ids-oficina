@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
 import ChatJefe from '../components/ChatJefe.jsx'
 import Personalizar from '../components/Personalizar.jsx'
 import EnVivo from '../components/EnVivo.jsx'
+import Aprobaciones from '../components/Aprobaciones.jsx'
 import OficinaScene, { ANCHO, ALTO } from '../game/OficinaScene.js'
 
 export default function Oficina() {
@@ -125,6 +126,7 @@ export default function Oficina() {
         )}
       </div>
 
+      <Aprobaciones compacto />
       <EnVivo agentes={agentes} filtro={filtroVivo} onFiltro={setFiltroVivo} />
     </div>
   )

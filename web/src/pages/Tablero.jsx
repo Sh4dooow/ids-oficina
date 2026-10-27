@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase, ESTADOS } from '../lib/supabase'
 import NuevaTarea from '../components/NuevaTarea.jsx'
+import Aprobaciones from '../components/Aprobaciones.jsx'
 
 // Kanban. Arrastras una tarjeta a una columna -> cambia `estado` en Supabase
 // -> el orquestador despierta al agente de esa columna.
@@ -32,6 +33,7 @@ export default function Tablero() {
 
   return (
     <div className="tablero">
+      <Aprobaciones compacto />
       <NuevaTarea productos={productos} onCreada={cargar} />
 
       <div className="columnas">
