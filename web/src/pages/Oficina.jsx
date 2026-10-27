@@ -20,7 +20,7 @@ export default function Oficina() {
   const agentesRef = useRef([])
 
   useEffect(() => {
-    const bus = new Phaser.Events.EventEmitter(); busRef.current = bus
+    const bus = new Phaser.Events.EventEmitter(); busRef.current = bus; window.oficinaBus = bus
     const game = new Phaser.Game({
       type: Phaser.AUTO, parent: hostRef.current, width: ANCHO, height: ALTO, pixelArt: true, roundPixels: true,
       backgroundColor: '#0b0d12', scene: [new OficinaScene(bus)],
@@ -48,6 +48,17 @@ export default function Oficina() {
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'mensajes' }, (p) => {
         const m = p.new
         if (m.de && !['ivan', 'sistema'].includes(m.de)) busRef.current?.emit('bocadillo', { id: m.de, texto: '💬 ' + m.contenido })
+        if (m.de === 'ivan') busRef.current?.emit('ceo', { accion: 'mensaje', texto: '💬 ' + m.contenido.slice(0, 80), agente: m.para })
+      })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'tareas' }, (p) => {
+        if (p.new.origen !== 'paperclip') busRef.current?.emit('ceo', { accion: 'tarea', texto: '📨 Nueva tarea: ' + (p.new.titulo || '').slice(0, 70) })
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'aprobaciones' }, (p) => {
+        const a = p.new
+        if (a.decision && !p.old?.decision) busRef.current?.emit('ceo', { accion: a.decision === 'no' ? 'rechazar' : 'aprobar', texto: (a.decision === 'no' ? '❌ No: ' : '✅ OK: ') + (a.nota || a.tarea || ''), agente: a.agente_id })
+      })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'lecciones' }, (p) => {
+        busRef.current?.emit('ceo', { accion: 'leccion', texto: '📚 Lección: ' + (p.new.titulo || '').slice(0, 70) })
       })
       .subscribe()
     return () => supabase.removeChannel(ch)

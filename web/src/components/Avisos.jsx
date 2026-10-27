@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
+import { AccionesRevision } from './Fase.jsx'
 
 const ICONO = { revisar: '👀', terminada: '✅', ok: '🙋', pregunta: '❓', info: 'ℹ️' }
 
@@ -7,10 +8,7 @@ const ICONO = { revisar: '👀', terminada: '✅', ok: '🙋', pregunta: '❓', 
 export default function Avisos() {
   const [avisos, setAvisos] = useState([])
   const [abierto, setAbierto] = useState(false)
-  const [editando, setEditando] = useState(null)
-  const [textos, setTextos] = useState({})
-  const [leccion, setLeccion] = useState({})
-  const [hechos, setHechos] = useState({})
+  const [tareas, setTareas] = useState({})
   const noLeidos = avisos.filter(a => !a.leido).length
 
   useEffect(() => {
@@ -31,21 +29,6 @@ export default function Avisos() {
   async function marcarTodo() { await supabase.from('avisos').update({ leido: true }).eq('leido', false) }
   function pedirPermiso() { try { Notification?.requestPermission?.() } catch {} }
 
-  async function tareaDe(identifier) {
-    const { data } = await supabase.from('tareas').select('id').eq('paperclip_identifier', identifier).limit(1)
-    return data?.[0]?.id
-  }
-  async function terminar(a) {
-    const id = await tareaDe(a.tarea_identifier); if (!id) return alert('No encuentro la tarea ' + a.tarea_identifier)
-    await supabase.from('tareas').update({ mover_a: 'listo' }).eq('id', id)
-    await marcar(a.id); setEditando(null); setHechos(h => ({ ...h, [a.id]: 'terminada' }))
-  }
-  async function corregir(a) {
-    const txt = (textos[a.id] || '').trim(); if (!txt) return
-    const id = await tareaDe(a.tarea_identifier); if (!id) return alert('No encuentro la tarea ' + a.tarea_identifier)
-    await supabase.from('tareas').update({ correccion: txt, correccion_leccion: leccion[a.id] !== false }).eq('id', id)
-    await marcar(a.id); setEditando(null); setTextos(t => ({ ...t, [a.id]: '' })); setHechos(h => ({ ...h, [a.id]: 'corregida' }))
-  }
 
   return (
     <div className="avisos">
@@ -65,25 +48,8 @@ export default function Avisos() {
                 <span className="muted">{new Date(a.creado_en).toLocaleString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span></div>
               {a.texto && <div className="muted pre">{a.texto}</div>}
               {a.tarea_identifier && <a className="link" href={`https://oficina-49-12-251-2.sslip.io/IVA/issues/${a.tarea_identifier}`} target="_blank" rel="noreferrer">abrir {a.tarea_identifier} ↗</a>}
-              {hechos[a.id] && <div className="muted">{hechos[a.id] === 'terminada' ? '✅ Enviado: tarea terminada' : '📨 Corrección enviada al agente'}</div>}
-              {a.tipo === 'revisar' && !hechos[a.id] && (
-                <div className="aviso-acciones" onClick={e => e.stopPropagation()}>
-                  {editando !== a.id ? (
-                    <div className="fila">
-                      <button className="btn-ok" onClick={() => terminar(a)}>✅ Me vale · terminar</button>
-                      <button className="btn-sec" onClick={() => setEditando(a.id)}>✏️ No me vale · corregir</button>
-                    </div>
-                  ) : (
-                    <div className="aviso-corregir">
-                      <textarea rows={3} placeholder="Qué está mal y cómo lo quieres (ej: el casco se ve raro, el humo tiene que ser blanco, no azul)" value={textos[a.id] || ''} onChange={e => setTextos(t => ({ ...t, [a.id]: e.target.value }))} autoFocus />
-                      <label className="muted"><input type="checkbox" checked={leccion[a.id] !== false} onChange={e => setLeccion(l => ({ ...l, [a.id]: e.target.checked }))} /> guardar también como lección para que no se repita</label>
-                      <div className="fila">
-                        <button className="btn-ok" onClick={() => corregir(a)}>📨 Enviar corrección</button>
-                        <button className="link" onClick={() => setEditando(null)}>cancelar</button>
-                      </div>
-                    </div>
-                  )}
-                </div>
+              {a.tipo === 'revisar' && a.tarea_identifier && (
+                <RevisionDeAviso identifier={a.tarea_identifier} tareas={tareas} setTareas={setTareas} onHecho={() => marcar(a.id)} />
               )}
             </div>
           ))}
@@ -91,4 +57,15 @@ export default function Avisos() {
       )}
     </div>
   )
+}
+
+function RevisionDeAviso({ identifier, tareas, setTareas, onHecho }) {
+  const t = tareas[identifier]
+  useEffect(() => {
+    if (t !== undefined) return
+    supabase.from('tareas').select('id,fase').eq('paperclip_identifier', identifier).limit(1).then(({ data }) => setTareas(x => ({ ...x, [identifier]: data?.[0] || null })))
+  }, [identifier])
+  if (!t) return null
+  if (t.fase !== 'para_revisar') return <div className="muted">{t.fase === 'terminada' ? '✅ Ya está terminada.' : '↩️ Ya la has devuelto al agente; te avisaré cuando la rehaga.'}</div>
+  return <AccionesRevision tareaId={t.id} identifier={identifier} onHecho={() => { onHecho?.(); setTareas(x => ({ ...x, [identifier]: { ...t, fase: 'x' } })) }} />
 }

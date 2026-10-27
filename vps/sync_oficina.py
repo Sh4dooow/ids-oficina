@@ -129,14 +129,18 @@ def sync_agentes(ids):
     for r in rows: sb.patch("agentes", f"id=eq.{r['id']}", {"estado": r["estado"]})
 
 def sync_tareas(ids):
-    issues = q("select id,identifier,title,description,status,assignee_agent_id,created_at,updated_at from issues order by created_at")
+    issues = q("select id,identifier,title,description,status,assignee_agent_id,created_at,updated_at, (select body from issue_comments c where c.issue_id=issues.id order by c.created_at desc limit 1) ult from issues order by created_at")
+    con_ok = {r["issue_id"] for r in q("select issue_id from issue_thread_interactions where status='pending'")}
     rows = []
     for i in issues:
         slug = ids.get(i["assignee_agent_id"])
         est = mapa_estado(i, slug)
         if est is None: continue
+        st = i["status"]
+        fase = "terminada" if st == "done" else "para_revisar" if st == "in_review" else "esperando_ok" if i["id"] in con_ok else "en_marcha" if st == "in_progress" else "pedida"
         rows.append({"paperclip_id": i["id"], "paperclip_identifier": i["identifier"], "titulo": f"{i['identifier']} · {i['title']}",
-                     "descripcion": (i["description"] or "")[:4000], "estado": est, "asignado_a": slug, "origen": "paperclip"})
+                     "descripcion": (i["description"] or "")[:4000], "estado": est, "asignado_a": slug, "origen": "paperclip",
+                     "fase": fase, "ultimo_mensaje": (i.get("ult") or "")[:400]})
     pendientes = {t["paperclip_id"] for t in sb.get("tareas", "mover_a=not.is.null&select=paperclip_id")}
     rows = [r for r in rows if r["paperclip_id"] not in pendientes]
     sb.upsert("tareas", rows, on="paperclip_id")

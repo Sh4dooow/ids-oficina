@@ -159,3 +159,16 @@ main { padding: 12px 16px; }
 .aviso-corregir { display:flex; flex-direction:column; gap:6px; }
 .aviso-corregir textarea { width:100%; background:#0b0d12; color:inherit; border:1px solid var(--borde); border-radius:8px; padding:8px; font:inherit; resize:vertical; }
 .btn-ok { background:#2ecc71; color:#0b0d12; border:0; border-radius:8px; padding:6px 10px; font-weight:600; cursor:pointer; }
+
+/* Fases y "te toca a ti" */
+.barra-fase { display:flex; gap:2px; margin:6px 0; }
+.barra-fase .paso { flex:1; display:flex; flex-direction:column; align-items:center; gap:1px; padding:3px 0; border-radius:6px; background:#1a1f2a; opacity:.45; font-size:10px; }
+.barra-fase .paso i { font-style:normal; font-size:12px; }
+.barra-fase .paso.hecho { opacity:.75; background:#1f3a2a; }
+.barra-fase .paso.actual { opacity:1; background:#f5a524; color:#111; font-weight:700; }
+.te-toca { background:var(--panel); border:1px solid #f5a524; border-radius:12px; padding:12px 14px; margin-bottom:12px; display:flex; flex-direction:column; gap:8px; }
+.te-toca h2 { margin:0 0 4px; }
+.te-toca .contador { background:#f5a524; color:#111; border-radius:999px; padding:0 8px; font-size:14px; margin-left:6px; }
+.te-toca-item { border-left:3px solid #f5a524; }
+.tarjeta.destacada { border:1px solid #f5a524; }
+.muted.pre { white-space:pre-wrap; }

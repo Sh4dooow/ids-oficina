@@ -49,6 +49,7 @@ export const MESAS = {
   tiendas: { x: 6,  y: 23, nombre: 'TIENDAS', despacho: { x0: 2, x1: 11, y0: 20, y1: 27 } },
   creador: { x: 19, y: 23, nombre: 'CREADOR', despacho: { x0: 15, x1: 24, y0: 20, y1: 27 } },
   editor:  { x: 31, y: 23, nombre: 'EDITOR',  despacho: { x0: 28, x1: 36, y0: 20, y1: 27 } },
+  ceo:     { x: 19, y: 3,  nombre: 'IVÁN · CEO', despacho: { x0: 15, x1: 25, y0: 2, y1: 8 } },
 }
 const COMUN = { x0: 2, x1: 49, y0: 12, y1: 16 }
 
@@ -98,7 +99,10 @@ export default class OficinaScene extends Phaser.Scene {
     prop('planta', 25, 1); bloquear(25, 1)
     prop('ventana', 15, 0, 1); prop('ventana', 23, 0, 1)
     luzTecho(20, 5)
-    this.rotulo(14, 1, 'LISTO PARA SUBIR')
+    this.rotulo(14, 1, 'DESPACHO DE IVÁN · CEO')
+    { prop('mesa', 18, 2); bloquear(18, 2, 2, 1); sombraMueble(18, 2, 2)
+      this.monitores.ceo = s.add.image(19 * T, 2 * T - 6, 'prop-monitorOff').setOrigin(0).setDepth(2 * T + 9)
+      prop('teclado', 19, 2); prop('silla', 19, 3, 3 * T + 2) }
 
     // ---------- Despacho del Jefe (28-50, 1-9) ----------
     for (let i = 0; i < 6; i++) for (let j = 0; j < 4; j++) s.add.image((36 + i) * T, (3 + j) * T, 'tile-alfombra').setOrigin(0).setDepth(0.2)
@@ -169,6 +173,19 @@ export default class OficinaScene extends Phaser.Scene {
       spr.setInteractive({ useHandCursor: true }).on('pointerdown', () => this.bus.emit('click-agente', id))
     }
 
+    // ---------- Iván (CEO): se mueve cuando Iván actúa desde la web ----------
+    { const cx = 19, cy = 3
+      registrarPersonaje(s, 'pj-ceo', this.apariencias.ceo || { ropa: 'camisa', ropa_color: '#e8e8e8', pelo: 'corto', pelo_color: 'castano' })
+      const spr = s.add.sprite(cx * T + 8, cy * T + 8, 'pj-ceo', 'up0').setOrigin(0.5, 0.78).setDepth(cy * T + 10)
+      const etiqueta = s.add.text(0, 0, 'IVÁN · CEO', { fontFamily: 'monospace', fontSize: '8px', color: '#111', backgroundColor: '#ffd666', padding: { x: 3, y: 1 } }).setOrigin(0.5, 1).setDepth(9999)
+      const burbuja = s.add.text(0, 0, '', { fontFamily: 'monospace', fontSize: '8px', color: '#111', backgroundColor: '#fffbe6', padding: { x: 4, y: 3 }, wordWrap: { width: 120 }, align: 'center' }).setOrigin(0.5, 1).setDepth(10000).setVisible(false)
+      const sombra = s.add.ellipse(spr.x, spr.y + 1, 12, 5, 0x000000, 0.25).setDepth(cy * T + 9)
+      this.ceo = { id: 'ceo', spr, etiqueta, burbuja, sombra, tx: cx, ty: cy, path: [], estado: 'ceo', dir: 'up', sentado: true, timer: 0, tarea: '', casa: { x: cx, y: cy }, volver: null }
+      this.agentes.ceo = this.ceo
+      spr.setInteractive({ useHandCursor: true }).on('pointerdown', () => this.bus.emit('click-agente', 'ceo'))
+      this.bus.on('ceo', (ev) => this.accionCeo(ev))
+    }
+
     // monitores parpadeando
     s.time.addEvent({ delay: 450, loop: true, callback: () => {
       for (const [id, mon] of Object.entries(this.monitores)) {
@@ -182,6 +199,23 @@ export default class OficinaScene extends Phaser.Scene {
     this.bus.on('bocadillo', ({ id, texto }) => this.bocadillo(id, texto))
     this.aplicarEstados()
     s.cameras.main.setBackgroundColor('#0b0d12')
+  }
+
+  // Iván actúa desde la web: su personaje va a la mesa del agente que corresponde y lo dice en un bocadillo.
+  accionCeo({ accion, texto, agente }) {
+    const c = this.ceo; if (!c) return
+    const destinoDe = { tarea: 'jefe', mensaje: 'jefe', aprobar: agente || 'creador', rechazar: agente || 'creador', corregir: agente || 'creador', terminar: 'ceo', leccion: 'escuela' }
+    const d = destinoDe[accion] || 'jefe'
+    let dest
+    if (d === 'ceo') dest = c.casa
+    else if (d === 'escuela') dest = { x: 46, y: 21 }
+    else { const m = MESAS[d]; dest = { x: m.x - 2, y: m.y } }
+    this.bocadillo('ceo', texto)
+    this.irA(c, dest.x, dest.y)
+    if (d !== 'ceo') {
+      if (c.volver) c.volver.remove(false)
+      c.volver = this.time.delayedCall(9000, () => { this.bocadillo(d, '👍 Recibido, Iván'); this.irA(c, c.casa.x, c.casa.y) })
+    }
   }
 
   setApariencia(id, apariencia, nombre) {
@@ -265,7 +299,7 @@ export default class OficinaScene extends Phaser.Scene {
       } else {
         spr.x = a.tx * T + 8; spr.y = a.ty * T + 8
         a.timer += delta
-        if (a.estado === 'libre' && a.timer > Phaser.Math.Between(6000, 14000)) {
+        if (a.estado === 'libre' && a.id !== 'ceo' && a.timer > Phaser.Math.Between(6000, 14000)) {
           a.timer = 0; const r = Math.random(); let dest = null
           if (r < 0.25) dest = { x: LUGARES.cafetera.x, y: LUGARES.cafetera.y }
           else if (r < 0.45) dest = this.tileLibre(MESAS[a.id].despacho)
