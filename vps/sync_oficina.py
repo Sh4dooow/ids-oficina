@@ -244,6 +244,19 @@ def movimientos_web():
             print("mover fallo:", e)
         sb.patch("tareas", f"id=eq.{t['id']}", {"mover_a": None})
 
+def cambio_modelo_pendiente():
+    """Si hay /root/cambio_modelo_pendiente, aplica ese modelo a todos los agentes en cuanto no haya trabajo en curso."""
+    f = "/root/cambio_modelo_pendiente"
+    if not os.path.exists(f): return
+    modelo = open(f).read().strip()
+    en_curso = q("select count(*) c from heartbeat_runs where status in ('running','queued')")[0]["c"]
+    abiertas = q("select count(*) c from issues where status='in_progress'")[0]["c"]
+    if en_curso or abiertas: return
+    q("update agents set adapter_config = adapter_config || %s::jsonb", json.dumps({"model": modelo, "effort": "medium"}))
+    os.remove(f)
+    tg(f"🔧 Cambio aplicado: los 4 agentes ahora usan {modelo} (esfuerzo medio) y tienen tope de 15 €/mes cada uno.")
+    print("modelo cambiado a", modelo)
+
 def mensajes_web_nuevos():
     for m in sb.get("mensajes", "procesado=eq.false&de=eq.ivan&para=eq.jefe&select=*"):
         args = ["agent-prompt", "Jefe", JEFE_KEY]
@@ -334,6 +347,7 @@ def loop():
             tareas_web_nuevas()
             movimientos_web()
             mensajes_web_nuevos()
+            cambio_modelo_pendiente()
             avisos_terminadas(ids)
             if n % 6 == 0: escuela()
         except Exception:
