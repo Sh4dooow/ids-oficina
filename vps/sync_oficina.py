@@ -370,6 +370,22 @@ def podar_sesiones():
                         os.remove(pth); print("sesion podada", slug, f[:8], st.st_size // 1000, "KB")
                 except OSError: pass
 
+def comentarios_sin_dueno():
+    """Si Iván (o el Jefe por Telegram) comenta en una tarea que está en revisión y sin agente, es una corrección:
+    devolvérsela al agente que la entregó y despertarlo. Si no, el comentario se queda ahí y nadie hace nada."""
+    ids_name = {a["id"]: a["name"] for a in q("select id,name from agents")}
+    for i in q("""select i.id, i.identifier, i.title,
+                    (select author_type from issue_comments c where c.issue_id=i.id order by created_at desc limit 1) ult_tipo,
+                    (select created_at from issue_comments c where c.issue_id=i.id order by created_at desc limit 1) ult_fecha,
+                    (select author_agent_id from issue_comments c where c.issue_id=i.id and author_agent_id is not null order by created_at desc limit 1) ult_agente
+               from issues i where i.status='in_review' and i.assignee_agent_id is null"""):
+        if i["ult_tipo"] != "user" or not i["ult_agente"]: continue
+        if REASIGNADAS.get(i["id"]) == str(i["ult_fecha"]): continue
+        REASIGNADAS[i["id"]] = str(i["ult_fecha"])
+        q("update issues set status='in_progress', assignee_agent_id=%s, assignee_user_id=null, updated_at=now() where id=%s", i["ult_agente"], i["id"])
+        despertar(ids_name[i["ult_agente"]], i["id"], i["identifier"], "Iván ha pedido un cambio sobre la entrega")
+        print("comentario sin dueño ->", i["identifier"], "devuelta a", ids_name[i["ult_agente"]])
+
 def cambio_modelo_pendiente():
     """Si hay /root/cambio_modelo_pendiente, aplica ese modelo a todos los agentes en cuanto no haya trabajo en curso."""
     f = "/root/cambio_modelo_pendiente"
@@ -451,6 +467,7 @@ def en_vivo():
 # ---------- APROBACIONES: preguntas/confirmaciones de los agentes -> panel de Iván ----------
 AVISADAS = set()
 REACTIVADAS = {}
+REASIGNADAS = {}
 def aprobaciones(ids):
     # 1) Paperclip -> Supabase
     rows = []
@@ -618,7 +635,7 @@ def loop():
             sync_comentarios(ids, tarea_ids)
             sync_actividad(ids, tarea_ids)
             tareas_web_nuevas()
-            movimientos_web(); correcciones_web()
+            movimientos_web(); correcciones_web(); comentarios_sin_dueno()
             aprobaciones(ids)
             mensajes_web_nuevos()
             cambio_modelo_pendiente()
