@@ -3,6 +3,7 @@ import Phaser from 'phaser'
 import { supabase } from '../lib/supabase'
 import ChatJefe from '../components/ChatJefe.jsx'
 import Personalizar from '../components/Personalizar.jsx'
+import EnVivo from '../components/EnVivo.jsx'
 import OficinaScene, { ANCHO, ALTO } from '../game/OficinaScene.js'
 
 export default function Oficina() {
@@ -13,6 +14,7 @@ export default function Oficina() {
   const [sel, setSel] = useState(null)
   const [pestana, setPestana] = useState('tareas')
   const [chatAbierto, setChatAbierto] = useState(false)
+  const [filtroVivo, setFiltroVivo] = useState(null)
   const agentesRef = useRef([])
 
   useEffect(() => {
@@ -36,6 +38,10 @@ export default function Oficina() {
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'actividad' }, (p) => {
         setActividad(a => [p.new, ...a].slice(0, 40))
         if (p.new.agente_id) busRef.current?.emit('bocadillo', { id: p.new.agente_id, texto: textoAccion(p.new) })
+      })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'en_vivo' }, (p) => {
+        const f = p.new
+        if (f.agente_id && f.tipo !== 'piensa') busRef.current?.emit('bocadillo', { id: f.agente_id, texto: f.texto.slice(0, 60) })
       })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'mensajes' }, (p) => {
         const m = p.new
@@ -119,10 +125,7 @@ export default function Oficina() {
         )}
       </div>
 
-      <div className="ticker">
-        {actividad.slice(0, 6).map(a => <span key={a.id}><b>{a.agente_id}</b> {textoAccion(a)}</span>)}
-        {actividad.length === 0 && <span className="muted">Sin actividad todavía. Cuando los agentes trabajen, lo verás aquí y en la oficina.</span>}
-      </div>
+      <EnVivo agentes={agentes} filtro={filtroVivo} onFiltro={setFiltroVivo} />
     </div>
   )
 }
