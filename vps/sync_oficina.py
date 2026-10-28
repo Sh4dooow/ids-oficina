@@ -404,6 +404,26 @@ def comentarios_sin_dueno():
         despertar(ids_name[i["ult_agente"]], i["id"], i["identifier"], "Iván ha pedido un cambio sobre la entrega")
         print("comentario sin dueño ->", i["identifier"], "devuelta a", ids_name[i["ult_agente"]])
 
+def sync_gastos():
+    """Coste real de API por ejecución (lo reporta Paperclip) -> Supabase, para la página de Gastos."""
+    ids = {a["id"]: AGENTES.get(a["name"]) for a in q("select id,name from agents")}
+    rows = []
+    for r in q("""select r.id, r.agent_id, r.created_at, r.usage_json, i.identifier, i.title
+                  from heartbeat_runs r left join issues i on i.id = coalesce(r.issue_id, (r.context_snapshot->>'issueId')::uuid)
+                  where r.created_at > now() - interval '60 days' and r.usage_json is not null"""):
+        u = r["usage_json"] or {}
+        try: usd = float(u.get("costUsd") or 0)
+        except Exception: usd = 0
+        if usd <= 0 and not u.get("inputTokens"): continue
+        rows.append({"run_id": r["id"], "tarea_identifier": r["identifier"], "tarea_titulo": (r["title"] or "")[:120], "agente_id": ids.get(r["agent_id"]),
+                     "modelo": u.get("model"), "usd": round(usd, 4), "tokens_entrada": int(u.get("inputTokens") or 0) + int(u.get("cachedInputTokens") or 0),
+                     "tokens_salida": int(u.get("outputTokens") or 0), "creado_en": r["created_at"].isoformat()})
+    for i in range(0, len(rows), 200): sb.upsert("gastos", rows[i:i+200], on="run_id")
+    # créditos de Higgsfield aprobados (los pide el agente en la pregunta: "Coste N créditos")
+    for a in sb.get("aprobaciones", "decision=eq.si&creditos=is.null&select=id,pregunta"):
+        m = re.search(r"(\d+(?:[.,]\d+)?)\s*(?:cr\b|cr[ée]ditos)", a.get("pregunta") or "", re.I)
+        sb.patch("aprobaciones", f"id=eq.{a['id']}", {"creditos": float(m.group(1).replace(",", ".")) if m else 0})
+
 def cambio_modelo_pendiente():
     """Si hay /root/cambio_modelo_pendiente, aplica ese modelo a todos los agentes en cuanto no haya trabajo en curso."""
     f = "/root/cambio_modelo_pendiente"
@@ -660,6 +680,7 @@ def loop():
             avisos_terminadas(ids); avisos_revision(ids)
             if n % 6 == 0: escuela()
             if n % 12 == 0: podar_sesiones()
+            if n % 6 == 3: sync_gastos()
         except Exception:
             traceback.print_exc()
         n += 1; sys.stdout.flush(); time.sleep(5)

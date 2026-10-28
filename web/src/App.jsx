@@ -6,6 +6,7 @@ import Oficina from './pages/Oficina.jsx'
 import Tablero from './pages/Tablero.jsx'
 import Escuela from './pages/Escuela.jsx'
 import Productos from './pages/Productos.jsx'
+import Gastos from './pages/Gastos.jsx'
 
 export default function App() {
   const [session, setSession] = useState(undefined)
@@ -28,6 +29,7 @@ export default function App() {
           <NavLink to="/tablero">📋 Tablero</NavLink>
           <NavLink to="/productos">📦 Productos</NavLink>
           <NavLink to="/escuela">🎓 Escuela</NavLink>
+          <NavLink to="/gastos">💶 Gastos</NavLink>
         </nav>
         <a className="link" href="https://oficina-49-12-251-2.sslip.io" target="_blank" rel="noreferrer">⚙️ Paperclip</a>
         <button className="link" onClick={() => supabase.auth.signOut()}>Salir</button>
@@ -39,6 +41,7 @@ export default function App() {
           <Route path="/tablero" element={<Tablero />} />
           <Route path="/productos" element={<Productos />} />
           <Route path="/escuela" element={<Escuela />} />
+          <Route path="/gastos" element={<Gastos />} />
         </Routes>
       </main>
     </div>

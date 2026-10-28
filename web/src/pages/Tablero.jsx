@@ -55,14 +55,13 @@ export default function Tablero() {
 
       <NuevaTarea productos={productos} onCreada={cargar} />
 
-      {tareas.some(t => t.fase === 'terminada' && esHoy(t.actualizado_en)) && (
-        <section className="terminadas-hoy">
-          <h3>✅ Terminadas hoy</h3>
-          {tareas.filter(t => t.fase === 'terminada' && esHoy(t.actualizado_en)).map(t => (
-            <div key={t.id} className="fila"><span>{t.titulo.replace(/^IVA-\d+ · /, '')}</span><span className="espacio" /><span className="muted">{t.asignado_a} · en tu Drive</span></div>
-          ))}
-        </section>
-      )}
+      <section className="terminadas-hoy">
+        <h3>✅ Terminadas <span className="muted">(las últimas; en tu Drive, carpeta de la marca → videos)</span></h3>
+        {tareas.filter(t => t.fase === 'terminada').sort((a, b) => new Date(b.actualizado_en) - new Date(a.actualizado_en)).slice(0, 15).map(t => (
+          <div key={t.id} className="fila"><span>{esHoy(t.actualizado_en) ? '🆕 ' : ''}{t.titulo.replace(/^IVA-\d+ · /, '')}</span><span className="espacio" /><span className="muted">{t.asignado_a} · {new Date(t.actualizado_en).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' })}</span></div>
+        ))}
+        {!tareas.some(t => t.fase === 'terminada') && <div className="muted">Todavía ninguna.</div>}
+      </section>
 
       <div className="fila"><h2 style={{ margin: '8px 0' }}>Todas las tareas</h2><span className="espacio" />
         <label className="muted"><input type="checkbox" checked={verTerminadas} onChange={e => setVerTerminadas(e.target.checked)} /> ver terminadas</label></div>

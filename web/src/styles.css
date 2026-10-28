@@ -175,3 +175,9 @@ main { padding: 12px 16px; }
 .barra-fase .paso.parada { opacity:1; background:#c0392b; color:#fff; font-weight:700; }
 .terminadas-hoy { background:var(--panel); border:1px solid #2ecc71; border-radius:12px; padding:10px 14px; margin:10px 0; display:flex; flex-direction:column; gap:6px; }
 .terminadas-hoy h3 { margin:0 0 4px; }
+
+.gastos-tiles, .gastos-agentes { display:grid; grid-template-columns:repeat(auto-fit, minmax(160px,1fr)); gap:10px; margin:10px 0; }
+.tile { background:var(--panel); border:1px solid var(--borde); border-radius:12px; padding:10px 12px; display:flex; flex-direction:column; gap:2px; }
+.tile small { color:#9aa3b2; } .tile b { font-size:22px; }
+.tabla-gastos { width:100%; border-collapse:collapse; } .tabla-gastos th, .tabla-gastos td { text-align:left; padding:6px 8px; border-bottom:1px solid var(--borde); } .tabla-gastos th { color:#9aa3b2; font-weight:600; }
+.btn-sec.activo { background:#f5a524; color:#111; }
