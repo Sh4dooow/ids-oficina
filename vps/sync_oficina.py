@@ -276,11 +276,17 @@ def archivar_entrega(issue):
     coms = q("select body from issue_comments where issue_id=%s order by created_at desc limit 12", issue["id"])
     marca = marca_de(cuerpo + "\n" + "\n".join(c["body"] or "" for c in coms)) or "varios"
     rutas = []
+    def resolver(m):
+        m = m.strip().strip("`'\"")
+        if "OFICINA/" in m: m = m.split("OFICINA/", 1)[1]
+        p = os.path.join(OFICINA, m)
+        return p if os.path.isfile(p) else None
     for c in coms:  # del comentario más reciente hacia atrás: el primero que nombre un vídeo es la entrega buena
-        for m in re.findall(r"[\w./\-]*_entrantes/[^\s`'\")\]]+\.(?:mp4|mov)", c["body"] or ""):
-            m = m[m.index("_entrantes/"):]
-            p = os.path.join(OFICINA, m)
-            if os.path.isfile(p) and p not in rutas: rutas.append(p)
+        body = c["body"] or ""
+        cands = re.findall(r"`([^`]+\.(?:mp4|mov))`", body) + re.findall(r"[\w./\-]*(?:_entrantes|/videos|/final|/clips)/[^\s`'\")\]]+\.(?:mp4|mov)", body)
+        for m in cands:
+            p = resolver(m)
+            if p and p not in rutas: rutas.append(p)
         if rutas: break
     if not rutas: return marca, []
     destino = os.path.join(OFICINA, marca, "videos"); os.makedirs(destino, exist_ok=True)
@@ -289,7 +295,10 @@ def archivar_entrega(issue):
     nombres = []
     for i, src in enumerate(rutas[:5]):
         nombre = f"{marca} video {n:03d}" + (f" ({i+1})" if len(rutas) > 1 else "") + os.path.splitext(src)[1]
-        shutil.copy2(src, os.path.join(destino, nombre)); nombres.append(f"{marca}/videos/{nombre}")
+        dst = os.path.join(destino, nombre)
+        if os.path.dirname(os.path.abspath(src)) == os.path.abspath(destino): os.rename(src, dst)  # ya estaba en videos/: solo renombrar
+        else: shutil.copy2(src, dst)
+        nombres.append(f"{marca}/videos/{nombre}")
     titulo = f"{marca} video {n:03d}"
     cli("issue", "update", issue["id"], "--title", titulo)
     t = sb.get("tareas", f"paperclip_id=eq.{issue['id']}&select=id")
