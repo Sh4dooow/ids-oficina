@@ -286,7 +286,12 @@ def archivar_entrega(issue):
         cands = re.findall(r"`([^`]+\.(?:mp4|mov))`", body) + re.findall(r"[\w./\-]*(?:_entrantes|/videos|/final|/clips)/[^\s`'\")\]]+\.(?:mp4|mov)", body)
         for m in cands:
             p = resolver(m)
-            if p and p not in rutas: rutas.append(p)
+            if not p or p in rutas: continue
+            if re.search(r"/(referencias|fotos|pruebas|frames)/", p): continue  # material de entrada, nunca una entrega
+            rutas.append(p)
+        # si hay entregas en videos/ o final/, ignorar clips intermedios
+        finales = [r for r in rutas if re.search(r"/(videos|final)/", r)]
+        if finales: rutas = finales
         if rutas: break
     if not rutas: return marca, []
     destino = os.path.join(OFICINA, marca, "videos"); os.makedirs(destino, exist_ok=True)

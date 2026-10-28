@@ -173,3 +173,5 @@ main { padding: 12px 16px; }
 .tarjeta.destacada { border:1px solid #f5a524; }
 .muted.pre { white-space:pre-wrap; }
 .barra-fase .paso.parada { opacity:1; background:#c0392b; color:#fff; font-weight:700; }
+.terminadas-hoy { background:var(--panel); border:1px solid #2ecc71; border-radius:12px; padding:10px 14px; margin:10px 0; display:flex; flex-direction:column; gap:6px; }
+.terminadas-hoy h3 { margin:0 0 4px; }

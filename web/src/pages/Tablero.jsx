@@ -55,6 +55,15 @@ export default function Tablero() {
 
       <NuevaTarea productos={productos} onCreada={cargar} />
 
+      {tareas.some(t => t.fase === 'terminada' && esHoy(t.actualizado_en)) && (
+        <section className="terminadas-hoy">
+          <h3>✅ Terminadas hoy</h3>
+          {tareas.filter(t => t.fase === 'terminada' && esHoy(t.actualizado_en)).map(t => (
+            <div key={t.id} className="fila"><span>{t.titulo.replace(/^IVA-\d+ · /, '')}</span><span className="espacio" /><span className="muted">{t.asignado_a} · en tu Drive</span></div>
+          ))}
+        </section>
+      )}
+
       <div className="fila"><h2 style={{ margin: '8px 0' }}>Todas las tareas</h2><span className="espacio" />
         <label className="muted"><input type="checkbox" checked={verTerminadas} onChange={e => setVerTerminadas(e.target.checked)} /> ver terminadas</label></div>
       <div className="columnas">
@@ -82,6 +91,8 @@ export default function Tablero() {
     </div>
   )
 }
+
+function esHoy(d) { if (!d) return false; const x = new Date(d), h = new Date(); return x.toDateString() === h.toDateString() }
 
 function DetalleTarea({ tarea, cerrar }) {
   const [mensajes, setMensajes] = useState([])
