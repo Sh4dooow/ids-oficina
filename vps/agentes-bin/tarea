@@ -18,7 +18,7 @@ cmd="${1:-}"; shift || true
 case "$cmd" in
   entregar)
     txt="${1:?texto}"
-    api -X PATCH "$U" -d "{\"status\":\"in_review\",\"assigneeUserId\":\"$IVAN\",\"comment\":$(j "$txt")}" && echo "OK entregada (en revisión de Iván). PARA AQUÍ: no hagas nada más.";;
+    api -X PATCH "$U" -d "{\"status\":\"in_review\",\"assigneeAgentId\":null,\"assigneeUserId\":\"$IVAN\",\"comment\":$(j "$txt")}" && echo "OK entregada (en revisión de Iván). PARA AQUÍ: no hagas nada más.";;
   ok)
     txt="${1:?texto}"; cr="${2:?creditos}"
     api -X POST "$U/interactions" -d "{\"kind\":\"request_confirmation\",\"idempotencyKey\":\"ok-$(date +%s)\",\"continuationPolicy\":\"wake_assignee\",\"payload\":{\"version\":1,\"prompt\":$(j "$txt — Coste: $cr créditos de Higgsfield."),\"acceptLabel\":\"Aprobado, adelante\",\"rejectLabel\":\"No\"}}" >/dev/null
