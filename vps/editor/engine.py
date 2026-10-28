@@ -88,13 +88,27 @@ def render(proj, salida):
         run(["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", lista,
              "-c", "copy", base])
         total = probe_dur(base)
-        # 3) música (si hay): empieza en su drop, al volumen pedido, mezclada con el audio de los clips
+        # inicios de cada clip en la línea de tiempo (para sincronizar el drop con el clip de showcase)
+        starts, acc = [], 0.0
+        for p in piezas:
+            starts.append(acc); acc += probe_dur(p)
+        # 3) música: el DROP de la canción cae justo al empezar el clip indicado (sync_to_clip).
         song = (proj.get("songs") or [None])[0]
         inputs = ["-i", base]; fc = []; amap = "0:a"
         if song and os.path.isfile(song.get("src", "")):
-            inputs += ["-ss", f"{float(song.get('drop',0))}", "-i", song["src"]]
+            drop = float(song.get("drop", 0))
+            sync = song.get("sync_to_clip")
+            t_target = starts[sync] if (sync is not None and 0 <= sync < len(starts)) else 0.0
             vol = float(song.get("volume", 0.9))
-            fc.append(f"[1:a]volume={vol},atrim=0:{total},asetpts=N/SR/TB[mus]")
+            ss = drop - t_target   # dónde empieza a sonar la canción para que el drop caiga en t_target
+            if ss >= 0:
+                inputs += ["-ss", f"{ss}", "-i", song["src"]]
+                fc.append(f"[1:a]volume={vol},atrim=0:{total},asetpts=N/SR/TB[mus]")
+            else:
+                # el drop va más tarde que el inicio de la canción: metemos silencio delante
+                inputs += ["-i", song["src"]]
+                fc.append(f"[1:a]volume={vol},adelay={int(-ss*1000)}|{int(-ss*1000)},"
+                          f"atrim=0:{total},asetpts=N/SR/TB[mus]")
             fc.append(f"[0:a]volume=1.0[clipa]")
             fc.append(f"[clipa][mus]amix=inputs=2:duration=first:dropout_transition=0[aout]")
             amap = "[aout]"
