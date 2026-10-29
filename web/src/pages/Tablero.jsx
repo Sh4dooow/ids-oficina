@@ -1,3 +1,4 @@
+import VideoTarea from '../components/VideoTarea.jsx'
 import { useEffect, useState } from 'react'
 import { supabase, ESTADOS } from '../lib/supabase'
 import NuevaTarea from '../components/NuevaTarea.jsx'
@@ -46,6 +47,7 @@ export default function Tablero() {
             <div className="fila"><b>{t.titulo}</b><span className="espacio" /><span className="chip">{t.asignado_a}</span></div>
             <BarraFase fase={t.fase} />
             {t.ultimo_mensaje && <div className="muted pre">{t.ultimo_mensaje}</div>}
+            {t.fase === 'para_revisar' && <VideoTarea url={t.video_url} />}
             {t.fase === 'para_revisar' && <AccionesRevision tareaId={t.id} identifier={t.paperclip_identifier} />}
             {t.fase === 'esperando_ok' && <div className="muted">👇 Responde en el panel «Pendiente de tu OK» de abajo.</div>}
           </div>
@@ -109,6 +111,7 @@ function DetalleTarea({ tarea, cerrar }) {
       <div className="card" onClick={e => e.stopPropagation()}>
         <h2>{tarea.titulo}</h2>
         <BarraFase fase={tarea.fase} />
+        {tarea.video_url && <VideoTarea url={tarea.video_url} />}
         {tarea.fase === 'para_revisar' && <AccionesRevision tareaId={tarea.id} identifier={tarea.paperclip_identifier} onHecho={cerrar} />}
         {tarea.ultimo_mensaje && <p className="muted pre">Último mensaje del agente: {tarea.ultimo_mensaje}</p>}
         {tarea.descripcion && <p style={{ whiteSpace: 'pre-wrap' }}>{tarea.descripcion}</p>}

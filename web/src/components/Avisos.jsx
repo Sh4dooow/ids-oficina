@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { AccionesRevision } from './Fase.jsx'
+import VideoTarea from './VideoTarea.jsx'
 
 const ICONO = { revisar: '👀', terminada: '✅', ok: '🙋', pregunta: '❓', info: 'ℹ️' }
 
@@ -46,12 +47,7 @@ export default function Avisos() {
             <div key={a.id} className={'aviso-item ' + (a.leido ? 'leido' : '')} onClick={() => !a.leido && a.tipo !== 'revisar' && marcar(a.id)}>
               <div className="fila"><span>{ICONO[a.tipo] || 'ℹ️'}</span><b>{a.titulo}</b><span className="espacio" />
                 <span className="muted">{new Date(a.creado_en).toLocaleString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span></div>
-              {a.video_url && (
-                <div className="aviso-video">
-                  <iframe src={a.video_url} allow="autoplay" title="vídeo" />
-                  <a className="link" href={a.video_url.replace('/preview', '/view')} target="_blank" rel="noreferrer">abrir en Drive ↗</a>
-                </div>
-              )}
+              <VideoTarea url={a.video_url} />
               {a.texto && <div className="muted pre">{a.texto}</div>}
               {a.tarea_identifier && <a className="link" href={`https://oficina-49-12-251-2.sslip.io/IVA/issues/${a.tarea_identifier}`} target="_blank" rel="noreferrer">abrir {a.tarea_identifier} ↗</a>}
               {a.tipo === 'revisar' && a.tarea_identifier && (
