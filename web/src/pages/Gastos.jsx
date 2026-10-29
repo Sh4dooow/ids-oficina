@@ -7,6 +7,8 @@ const USD_EUR = 0.92
 const eur = v => (v * USD_EUR).toLocaleString('es-ES', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2 })
 const usd = v => '$' + v.toFixed(2)
 
+const NOMBRE = { tiendas: 'Creador 2', creador: 'Creador', editor: 'Editor', jefe: 'Jefe' }
+
 export default function Gastos() {
   const [gastos, setGastos] = useState([])
   const [aprob, setAprob] = useState([])
@@ -70,7 +72,7 @@ export default function Gastos() {
       <h3>Por agente</h3>
       <div className="gastos-agentes">
         {Object.entries(porAgente).sort((a, b) => b[1] - a[1]).map(([a, v]) => (
-          <div key={a} className="tile"><small>{a}</small><b>{eur(v)}</b><span className="muted">{total ? Math.round(v / total * 100) : 0} %</span></div>
+          <div key={a} className="tile"><small>{NOMBRE[a] || a}</small><b>{eur(v)}</b><span className="muted">{total ? Math.round(v / total * 100) : 0} %</span></div>
         ))}
       </div>
 
@@ -82,7 +84,7 @@ export default function Gastos() {
             <tr key={t.id}>
               <td><b>{t.id}</b> <span className="muted">{tituloDe(t.id) || t.titulo}</span></td>
               <td>{faseDe(t.id) === 'terminada' ? '✅' : faseDe(t.id) ? '⏳' : ''}</td>
-              <td>{t.runs} <span className="muted">({[...t.agentes].join(', ')})</span></td>
+              <td>{t.runs} <span className="muted">({[...t.agentes].map(x => NOMBRE[x] || x).join(', ')})</span></td>
               <td><b>{eur(t.usd)}</b> <span className="muted">{usd(t.usd)}</span></td>
               <td>{creditosPorTarea[t.id] ? creditosPorTarea[t.id] + ' cr' : <span className="muted">—</span>}</td>
             </tr>
