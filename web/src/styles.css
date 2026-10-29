@@ -181,3 +181,7 @@ main { padding: 12px 16px; }
 .tile small { color:#9aa3b2; } .tile b { font-size:22px; }
 .tabla-gastos { width:100%; border-collapse:collapse; } .tabla-gastos th, .tabla-gastos td { text-align:left; padding:6px 8px; border-bottom:1px solid var(--borde); } .tabla-gastos th { color:#9aa3b2; font-weight:600; }
 .btn-sec.activo { background:#f5a524; color:#111; }
+
+/* vídeo incrustado en un aviso (previsualización de Drive) */
+.aviso-video { margin: 6px 0; display: flex; flex-direction: column; gap: 4px; }
+.aviso-video iframe { width: 100%; max-width: 300px; aspect-ratio: 9/16; border: 0; border-radius: 10px; background: #000; }
