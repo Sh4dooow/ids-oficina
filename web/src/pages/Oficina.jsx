@@ -6,6 +6,7 @@ import Personalizar from '../components/Personalizar.jsx'
 import EnVivo from '../components/EnVivo.jsx'
 import Aprobaciones from '../components/Aprobaciones.jsx'
 import Avisos from '../components/Avisos.jsx'
+import Ensenar from '../components/Ensenar.jsx'
 import OficinaScene, { ANCHO, ALTO } from '../game/OficinaScene.js'
 import Oficina3D from '../game/Oficina3D.js'
 
@@ -20,6 +21,8 @@ export default function Oficina() {
   const [filtroVivo, setFiltroVivo] = useState(null)
   const agentesRef = useRef([])
 
+  const [ensenar, setEnsenar] = useState(null)   // null | { video } 
+  useEffect(() => { const h = (e) => setEnsenar({ video: e.detail || null }); window.addEventListener('oficina-ensenar', h); return () => window.removeEventListener('oficina-ensenar', h) }, [])
   const [modo3d, setModo3d] = useState(() => localStorage.getItem('oficina_modo') !== '2d')
 
   useEffect(() => {
@@ -104,6 +107,7 @@ export default function Oficina() {
         ))}
         <span className="espacio" />
         <Avisos />
+        <button className="btn-sec" onClick={() => setEnsenar({ video: null })}>🎓 Enseñar</button>
         <button className="btn-sec" title="Cambiar entre oficina 3D y pixel" onClick={() => { const v = !modo3d; localStorage.setItem('oficina_modo', v ? '3d' : '2d'); setModo3d(v) }}>{modo3d ? '🕹️ Ver en pixel' : '🧊 Ver en 3D'}</button>
         <button className="btn-sec" onClick={() => setChatAbierto(v => !v)}>💬 Hablar con el Jefe</button>
       </div>
@@ -151,6 +155,7 @@ export default function Oficina() {
         )}
       </div>
 
+      {ensenar && <Ensenar videoInicial={ensenar.video} onCerrar={() => setEnsenar(null)} />}
       <Aprobaciones compacto />
       <EnVivo agentes={agentes} filtro={filtroVivo} onFiltro={setFiltroVivo} />
     </div>

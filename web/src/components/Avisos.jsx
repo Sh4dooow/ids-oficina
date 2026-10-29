@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase'
 import { AccionesRevision } from './Fase.jsx'
 import VideoTarea from './VideoTarea.jsx'
 
-const ICONO = { revisar: '👀', terminada: '✅', ok: '🙋', pregunta: '❓', info: 'ℹ️' }
+const ICONO = { revisar: '👀', terminada: '✅', terminado: '✅', leccion: '📚', ok: '🙋', pregunta: '❓', info: 'ℹ️' }
 
 // Campana de avisos: lo que Iván tiene que mirar (tareas listas para revisar, terminadas, OKs pendientes).
 export default function Avisos() {
@@ -49,6 +49,7 @@ export default function Avisos() {
                 <span className="muted">{new Date(a.creado_en).toLocaleString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span></div>
               <VideoTarea url={a.video_url} />
               {a.texto && <div className="muted pre">{a.texto}</div>}
+              {a.video_url && a.tipo === 'terminado' && <button className="link" onClick={(e) => { e.stopPropagation(); window.dispatchEvent(new CustomEvent('oficina-ensenar', { detail: a })) }}>🎓 Opinar sobre este vídeo (aprenden para los siguientes)</button>}
               {a.tarea_identifier && <a className="link" href={`https://oficina-49-12-251-2.sslip.io/IVA/issues/${a.tarea_identifier}`} target="_blank" rel="noreferrer">abrir {a.tarea_identifier} ↗</a>}
               {a.tipo === 'revisar' && a.tarea_identifier && (
                 <RevisionDeAviso identifier={a.tarea_identifier} tareas={tareas} setTareas={setTareas} onHecho={() => marcar(a.id)} />
