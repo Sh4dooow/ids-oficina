@@ -31,7 +31,7 @@ export default class Oficina3D {
     this.renderer.setClearColor(0x0b0d12)
     host.appendChild(this.renderer.domElement)
     this.labels = new CSS2DRenderer(); this.labels.setSize(W, H)
-    Object.assign(this.labels.domElement.style, { position: 'absolute', top: 0, left: 0, pointerEvents: 'none' })
+    Object.assign(this.labels.domElement.style, { position: 'absolute', top: 0, left: 0, pointerEvents: 'none', zIndex: 1 })
     host.appendChild(this.labels.domElement)
 
     this.scene = new THREE.Scene(); this.scene.fog = new THREE.Fog(0x0b0d12, 70, 120)

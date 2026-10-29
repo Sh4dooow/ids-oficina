@@ -55,7 +55,7 @@ main { padding:20px; }
 .columna h3 { font-size:14px; text-transform:uppercase; letter-spacing:1px; }
 .tarjeta { background:#11141a; border:1px solid var(--borde); border-radius:10px; padding:10px; margin-bottom:8px; cursor:grab; }
 .tarjeta.activo { border-color:var(--acento); }
-.modal { position:fixed; inset:0; background:rgba(0,0,0,.6); display:grid; place-items:center; }
+.modal { position:fixed; inset:0; background:rgba(0,0,0,.6); display:grid; place-items:center; z-index:1000; }
 .modal .card { width:min(720px, 92vw); max-height:88vh; overflow:auto; }
 .resultado { background:#0d0f14; padding:12px; border-radius:8px; font-size:12px; overflow:auto; white-space:pre-wrap; }
 
@@ -207,3 +207,5 @@ main { padding: 12px 16px; }
 .chip.activo.bien { border-color:#3fbf7f; } .chip.activo.mejorar { border-color:#f5a524; }
 .btn-sec.grabando { background:#b3261e; animation: pulso 1s infinite; }
 @keyframes pulso { 50% { opacity:.6; } }
+
+.panel-flotante, .avisos-lista { z-index:100; }
