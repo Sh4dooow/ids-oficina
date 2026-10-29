@@ -7,6 +7,7 @@ import EnVivo from '../components/EnVivo.jsx'
 import Aprobaciones from '../components/Aprobaciones.jsx'
 import Avisos from '../components/Avisos.jsx'
 import OficinaScene, { ANCHO, ALTO } from '../game/OficinaScene.js'
+import Oficina3D from '../game/Oficina3D.js'
 
 export default function Oficina() {
   const hostRef = useRef(null), busRef = useRef(null)
@@ -19,18 +20,28 @@ export default function Oficina() {
   const [filtroVivo, setFiltroVivo] = useState(null)
   const agentesRef = useRef([])
 
+  const [modo3d, setModo3d] = useState(() => localStorage.getItem('oficina_modo') !== '2d')
+
   useEffect(() => {
     const bus = new Phaser.Events.EventEmitter(); busRef.current = bus; window.oficinaBus = bus
-    const game = new Phaser.Game({
-      type: Phaser.AUTO, parent: hostRef.current, width: ANCHO, height: ALTO, pixelArt: true, roundPixels: true,
-      backgroundColor: '#0b0d12', scene: [new OficinaScene(bus)],
-      scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
-    })
     bus.on('click-agente', (id) => { setSel(id); setPestana('tareas') })
-    // cuando la escena esté lista, mandar apariencias
-    game.events.once('ready', () => { for (const a of agentesRef.current) bus.emit('apariencia', { id: a.id, apariencia: a.apariencia, nombre: a.nombre }) })
-    return () => { game.destroy(true); busRef.current = null }
-  }, [])
+    const mandarApariencias = () => { for (const a of agentesRef.current) bus.emit('apariencia', { id: a.id, apariencia: a.apariencia, nombre: a.nombre }) }
+    let limpiar
+    if (modo3d) {
+      const esc = new Oficina3D(bus); esc.montar(hostRef.current); mandarApariencias()
+      limpiar = () => esc.destruir()
+    } else {
+      const game = new Phaser.Game({
+        type: Phaser.AUTO, parent: hostRef.current, width: ANCHO, height: ALTO, pixelArt: true, roundPixels: true,
+        backgroundColor: '#0b0d12', scene: [new OficinaScene(bus)],
+        scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
+      })
+      game.events.once('ready', mandarApariencias)
+      limpiar = () => game.destroy(true)
+    }
+    cargar()
+    return () => { limpiar(); busRef.current = null }
+  }, [modo3d])
 
   useEffect(() => {
     cargar()
@@ -93,11 +104,12 @@ export default function Oficina() {
         ))}
         <span className="espacio" />
         <Avisos />
+        <button className="btn-sec" title="Cambiar entre oficina 3D y pixel" onClick={() => { const v = !modo3d; localStorage.setItem('oficina_modo', v ? '3d' : '2d'); setModo3d(v) }}>{modo3d ? '🕹️ Ver en pixel' : '🧊 Ver en 3D'}</button>
         <button className="btn-sec" onClick={() => setChatAbierto(v => !v)}>💬 Hablar con el Jefe</button>
       </div>
 
       <div className="escenario">
-        <div ref={hostRef} className="juego" />
+        <div ref={hostRef} className={"juego" + (modo3d ? " juego3d" : "")} />
 
         {agSel && (
           <aside className="panel-flotante">
